@@ -1,0 +1,10 @@
+{
+  "name": "engram",
+  "version": "0.2.0",
+  "description": "The why database. Zero-friction decision store that auto-accumulates from git commits, git-tracks as markdown, and injects into every agent session.",
+  "author": {
+    "name": "Zima Labs",
+    "url": "https://github.com/zimalabs"
+  },
+  "repository": "https://github.com/zimalabs/engram"
+}

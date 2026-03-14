@@ -1,0 +1,89 @@
+# CLAUDE.md
+
+## What This Is
+
+Claude Code plugin that gives agents persistent decision memory. Signals (decisions, findings, issues) are git-tracked markdown files in `.engram/`. A derived SQLite index provides FTS5 search. No CLI — hooks handle everything automatically.
+
+## Commands
+
+```sh
+make check    # shellcheck + tests (run before every push)
+make lint     # shellcheck only
+make test     # test suite only
+```
+
+## File Layout
+
+```
+lib.sh                    # Core library — all functions live here
+schema.sql                # SQLite schema (signals table + FTS5 + triggers)
+hooks/
+  session-start.sh        # Ingest, reindex, brief, inject context
+  session-end.sh          # Ingest, reindex, brief (no injection)
+  hooks.json              # Hook registration (SessionStart + SessionEnd)
+skills/
+  capture/SKILL.md        # Write signal files via Write tool
+  query/SKILL.md          # SQL queries against index.db
+tests/
+  test_engram.sh          # 21 test groups
+  run_tests.sh            # Test runner wrapper
+.claude-plugin/
+  plugin.json             # Plugin manifest
+```
+
+## Key Concepts
+
+- **Signals** = markdown files in `.engram/{decisions,findings,issues}/`
+- **Private signals** = same format, in `.engram/private/{decisions,findings,issues}/` (git-ignored, excluded from brief)
+- **index.db** = derived SQLite database, rebuilt from files every session. Safe to delete.
+- **brief.md** = generated summary injected into agent context. Public signals only.
+
+## How the Index Stays Fresh
+
+No background jobs. Hooks run the full pipeline at session start and end:
+
+```
+engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brief
+```
+
+`engram_reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds.
+
+## Architecture Rules
+
+1. **Markdown is source of truth.** `index.db` is derived. Never store data only in SQLite.
+2. **Append-only signals.** Don't delete or overwrite signal files. Write new ones.
+3. **Directory = privacy.** `private/` path means git-ignored + excluded from brief. No config flags.
+4. **No CLI.** Capture via Write tool, query via `@engram:query` skill, everything else via hooks.
+5. **Pure functions in lib.sh.** No side effects at source time. Every function takes `dir` as first arg.
+
+## Schema
+
+```sql
+signals: id, type, title, content, tags, source, date, file, private, created_at
+signals_fts: FTS5 virtual table (title, content, tags) synced via triggers
+meta: key, value  (stores ingestion cursors like last_commit)
+```
+
+Types: `decision`, `finding`, `issue`
+Privacy: `private=0` (public), `private=1` (private)
+
+## Adding a New Function
+
+1. Add the function to `lib.sh`
+2. Add tests to `tests/test_engram.sh`
+3. Wire into hooks if it should run at session start/end
+4. Run `make check`
+
+## Testing
+
+Tests use temp directories and real SQLite — no mocks. Each test function creates its own `.engram/` in `$TEST_DIR`. Git-related tests create throwaway repos via `_create_test_repo()`.
+
+Test helpers: `assert_eq`, `assert_contains`, `assert_not_contains`, `assert_file_exists`, `assert_dir_exists`, `assert_file_count`.
+
+## Conventions
+
+- Table/FTS names: `signals`, `signals_fts` (not `notes`)
+- SQL escaping: use `sed "s/'/''/g"`, not bash string replacement
+- Frontmatter parsing: manual line-by-line (no YAML parser dependency)
+- Hook timeout: 15 seconds (set in `hooks.json`)
+- Filenames: `{YYYY-MM-DD}-{slug}.md`, slug via `_slugify()`
