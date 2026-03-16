@@ -39,7 +39,7 @@ plugins/engram/
 
 ## Key Concepts
 
-- **Signals** = decision markdown files in `.engram/signals/` (prefixed `decision-`)
+- **Signals** = decision markdown files in `.engram/decisions/`
 - **Private signals** = same format, in `.engram/_private/` (git-ignored, excluded from brief)
 - **index.db** = derived SQLite database, rebuilt from files every session. Safe to delete.
 - **brief.md** = generated summary injected into agent context. Public signals only.
@@ -90,10 +90,10 @@ Test helpers: `assert_eq`, `assert_contains`, `assert_not_contains`, `assert_fil
 
 ## Dogfooding: Record Your Decisions
 
-This project is a decision memory system — use it. **Before committing any significant change**, write a signal file to `.engram/signals/`:
+This project is a decision memory system — use it. **Before committing any significant change**, write a signal file to `.engram/decisions/`:
 
 ```
-.engram/signals/decision-{slug}.md
+.engram/decisions/{slug}.md
 ```
 
 With frontmatter:
@@ -118,4 +118,4 @@ What counts as significant: architecture changes, new features, refactors, depen
 - SQL escaping: use `sed "s/'/''/g"`, not bash string replacement
 - Frontmatter parsing: manual line-by-line (no YAML parser dependency)
 - Hook timeout: 15 seconds (set in `hooks.json`)
-- Filenames: `decision-{slug}.md`, slug via `_slugify()`
+- Filenames: `{slug}.md`, slug via `_slugify()`

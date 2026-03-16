@@ -103,7 +103,7 @@ Present the full list of decisions as a numbered reference. For each unlinked de
 Example edit — inserting links:
 ```
 old_string: "tags: [ci, testing]"
-new_string: "tags: [ci, testing]\nlinks: [related:decision-reorganize-repo]"
+new_string: "tags: [ci, testing]\nlinks: [related:reorganize-repo]"
 ```
 
 ### Phase 3: Summary

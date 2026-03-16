@@ -2,7 +2,7 @@
 type: decision
 date: 2026-03-16
 tags: [cleanup, repo]
-links: [related:decision-add-ci-workflow-security-policy-funding-faq-and-go]
+links: [related:add-ci-workflow-security-policy-funding-faq-and-go]
 source: git:a7189145e0dbacb434058fe8be4b9b7bb1d4c47e
 ---
 

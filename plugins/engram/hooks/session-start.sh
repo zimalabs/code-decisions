@@ -58,10 +58,10 @@ instructions="$instructions
 ---
 You have a persistent decision store via engram (.engram/ directory).
 When you make a significant decision, write a signal file:
-  Write .engram/signals/decision-{slug}.md  (use the decision schema)
+  Write .engram/decisions/{slug}.md  (use the decision schema)
 
 For PRIVATE signals (sensitive, never git-tracked or auto-sent to API):
-  Write .engram/_private/decision-{slug}.md
+  Write .engram/_private/{slug}.md
 
 To query past signals:
   @engram:query <question>"

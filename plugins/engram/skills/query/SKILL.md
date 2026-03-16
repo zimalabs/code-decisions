@@ -66,11 +66,11 @@ SELECT id, title, date FROM signals WHERE private=1 ORDER BY date DESC LIMIT 20
 
 ```sql
 -- What superseded a decision?
-SELECT file_stem, title, date FROM signals WHERE supersedes = 'decision-old-slug'
+SELECT file_stem, title, date FROM signals WHERE supersedes = 'old-slug'
 
 -- Full supersession chain (walk backwards from current)
 WITH RECURSIVE chain(stem, depth) AS (
-  SELECT file_stem, 0 FROM signals WHERE file_stem = 'decision-current'
+  SELECT file_stem, 0 FROM signals WHERE file_stem = 'current'
   UNION ALL
   SELECT s.supersedes, c.depth + 1
   FROM chain c JOIN signals s ON s.file_stem = c.stem
@@ -83,8 +83,8 @@ JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth
 SELECT DISTINCT s.file_stem, s.title, l.rel_type
 FROM links l JOIN signals s
 ON s.file_stem = l.source_file OR s.file_stem = l.target_file
-WHERE (l.source_file = 'decision-x' OR l.target_file = 'decision-x')
-AND s.file_stem != 'decision-x'
+WHERE (l.source_file = 'x' OR l.target_file = 'x')
+AND s.file_stem != 'x'
 ```
 
 ## Schema Reference

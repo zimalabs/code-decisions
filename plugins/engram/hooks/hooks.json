@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Review this session. You MUST respond with ONLY valid JSON, no other text. If the agent made significant code changes (new features, architecture changes, refactors, dependency changes, non-trivial bug fixes) via Write or Edit tools, check whether at least one NEW .engram/signals/ file was also created via Write during this session. Files inside .engram/ themselves don't count as code changes. Trivial changes (typo fixes, formatting, comment-only edits, test-only changes, changes to README.md, CHANGELOG.md, LICENSE, or files in a docs/ directory) are exempt. Note: SKILL.md files, plugin manifests, schema files, and hook scripts are functional code, NOT documentation. If significant code changes exist but no .engram/signals/ file was written, respond {\"ok\": false, \"reason\": \"Significant changes need a decision signal — use @engram:capture to write .engram/signals/decision-{slug}.md\"}. Otherwise respond {\"ok\": true}."
+            "prompt": "Review this session. You MUST respond with ONLY valid JSON, no other text. If the agent made significant code changes (new features, architecture changes, refactors, dependency changes, non-trivial bug fixes) via Write or Edit tools, check whether at least one NEW .engram/decisions/ file was also created via Write during this session. Files inside .engram/ themselves don't count as code changes. Trivial changes (typo fixes, formatting, comment-only edits, test-only changes, changes to README.md, CHANGELOG.md, LICENSE, or files in a docs/ directory) are exempt. Note: SKILL.md files, plugin manifests, schema files, and hook scripts are functional code, NOT documentation. If significant code changes exist but no .engram/decisions/ file was written, respond {\"ok\": false, \"reason\": \"Significant changes need a decision signal — use @engram:capture to write .engram/decisions/{slug}.md\"}. Otherwise respond {\"ok\": true}."
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A file was just written or edited. You MUST respond with ONLY valid JSON, no other text. Check if this was a significant code change (new feature, architecture change, refactor, dependency change, non-trivial bug fix). Respond {\"ok\": true} if ANY of these apply: (1) the file is inside .engram/, (2) the change is test-only, (3) the change is formatting/whitespace-only, (4) the file is pure project documentation (README.md, CHANGELOG.md, LICENSE, or files inside a docs/ directory). Note: SKILL.md files, plugin manifests, schema files, and hook scripts are functional code, NOT documentation — do not skip these. If the change IS significant and no .engram/signals/ file has been written this session, respond {\"ok\": true, \"reason\": \"Consider recording this decision: @engram:capture can write a signal file.\"}. Only nudge ONCE per session; if already nudged, respond {\"ok\": true}."
+            "prompt": "A file was just written or edited. You MUST respond with ONLY valid JSON, no other text. Check if this was a significant code change (new feature, architecture change, refactor, dependency change, non-trivial bug fix). Respond {\"ok\": true} if ANY of these apply: (1) the file is inside .engram/, (2) the change is test-only, (3) the change is formatting/whitespace-only, (4) the file is pure project documentation (README.md, CHANGELOG.md, LICENSE, or files inside a docs/ directory). Note: SKILL.md files, plugin manifests, schema files, and hook scripts are functional code, NOT documentation — do not skip these. If the change IS significant and no .engram/decisions/ file has been written this session, respond {\"ok\": true, \"reason\": \"Consider recording this decision: @engram:capture can write a signal file.\"}. Only nudge ONCE per session; if already nudged, respond {\"ok\": true}."
           },
           {
             "type": "command",
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Check the file path being written or edited. You MUST respond with ONLY valid JSON, no other text. If the path does NOT target .engram/signals/ or .engram/_private/, respond {\"ok\": true}. If the path DOES target .engram/signals/ or .engram/_private/, validate ALL of the following: (1) Filename matches pattern decision-{slug}.md. (2) File content starts with --- frontmatter delimiter on line 1. (3) File content contains a closing --- frontmatter delimiter. (4) Frontmatter contains a date: field with ISO format (YYYY-MM-DD). (5) Frontmatter contains a tags: field with at least one tag (not empty []). (6) Body after frontmatter has an H1 title (# ...). (7) A lead paragraph exists after the H1 title — the first non-empty, non-heading line must be at least 20 characters and explain the 'why' behind the decision. If ALL validations pass, respond {\"ok\": true}. If ANY validation fails, respond {\"ok\": false, \"reason\": \"description of which validation failed and how to fix it — e.g. 'tags: is empty, add at least one tag like [architecture]' or 'lead paragraph missing or too short, add a sentence explaining why this decision was made (>= 20 chars)'\"}."
+            "prompt": "Check the file path being written or edited. You MUST respond with ONLY valid JSON, no other text. If the path does NOT target .engram/decisions/ or .engram/_private/, respond {\"ok\": true}. If the path DOES target .engram/decisions/ or .engram/_private/, validate ALL of the following: (1) Filename matches pattern {slug}.md. (2) File content starts with --- frontmatter delimiter on line 1. (3) File content contains a closing --- frontmatter delimiter. (4) Frontmatter contains a date: field with ISO format (YYYY-MM-DD). (5) Frontmatter contains a tags: field with at least one tag (not empty []). (6) Body after frontmatter has an H1 title (# ...). (7) A lead paragraph exists after the H1 title — the first non-empty, non-heading line must be at least 20 characters and explain the 'why' behind the decision. If ALL validations pass, respond {\"ok\": true}. If ANY validation fails, respond {\"ok\": false, \"reason\": \"description of which validation failed and how to fix it — e.g. 'tags: is empty, add at least one tag like [architecture]' or 'lead paragraph missing or too short, add a sentence explaining why this decision was made (>= 20 chars)'\"}."
           }
         ]
       }
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Context is about to be compacted. You MUST respond with ONLY valid JSON, no other text. Scan the conversation for decisions discussed but NOT yet recorded as .engram/signals/ files. If you find unrecorded decisions, respond {\"ok\": true, \"reason\": \"Before compaction, these decisions appear unrecorded: [list]. Consider @engram:capture.\"}. If all decisions have signal files or none were discussed, respond {\"ok\": true}. Always respond ok:true — never block compaction."
+            "prompt": "Context is about to be compacted. You MUST respond with ONLY valid JSON, no other text. Scan the conversation for decisions discussed but NOT yet recorded as .engram/decisions/ files. If you find unrecorded decisions, respond {\"ok\": true, \"reason\": \"Before compaction, these decisions appear unrecorded: [list]. Consider @engram:capture.\"}. If all decisions have signal files or none were discussed, respond {\"ok\": true}. Always respond ok:true — never block compaction."
           },
           {
             "type": "command",
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "You MUST respond with ONLY valid JSON, no other text. Check if any recent decisions in .engram/signals/ might benefit from enrichment (missing tags, missing body sections, or signals with missing rationale that are marked incomplete). Incomplete signals lack a lead paragraph explaining 'why' and are excluded from the brief until enriched. If enrichment opportunities exist, respond {\"ok\": true, \"reason\": \"Some engram decisions may benefit from enrichment — incomplete signals are excluded from the brief. Consider @engram:introspect.\"}. Otherwise respond {\"ok\": true}."
+            "prompt": "You MUST respond with ONLY valid JSON, no other text. Check if any recent decisions in .engram/decisions/ might benefit from enrichment (missing tags, missing body sections, or signals with missing rationale that are marked incomplete). Incomplete signals lack a lead paragraph explaining 'why' and are excluded from the brief until enriched. If enrichment opportunities exist, respond {\"ok\": true, \"reason\": \"Some engram decisions may benefit from enrichment — incomplete signals are excluded from the brief. Consider @engram:introspect.\"}. Otherwise respond {\"ok\": true}."
           }
         ]
       }

@@ -10,8 +10,8 @@ Write a decision signal file directly to the `.engram/` directory using the Writ
 ## Execution Steps
 
 1. **Read the schema**: `${CLAUDE_PLUGIN_ROOT}/schemas/decision.md`
-2. **Determine privacy**: sensitive content → `.engram/_private/`, everything else → `.engram/signals/`
-3. **Generate filename**: `decision-{slug}.md`
+2. **Determine privacy**: sensitive content → `.engram/_private/`, everything else → `.engram/decisions/`
+3. **Generate filename**: `{slug}.md`
 4. **Write the file** using the Write tool, following the template and body sections from the schema
 5. **Confirm** to the user what was captured
 
@@ -29,7 +29,7 @@ The canonical template and field definitions live in `${CLAUDE_PLUGIN_ROOT}/sche
 
 Signals have two visibility tiers based on directory path:
 
-- **Public** (default): `.engram/signals/`
+- **Public** (default): `.engram/decisions/`
   - Git-tracked, included in brief, visible in PRs
 - **Private**: `.engram/_private/`
   - Git-ignored, excluded from brief, never auto-sent to Claude API
@@ -48,13 +48,13 @@ Moving a file between public and private paths changes its visibility on next re
 Use `supersedes:` to mark a decision as replacing a prior one. The superseded decision is hidden from the brief but remains queryable.
 
 ```markdown
-supersedes: decision-old-auth    # this decision replaces decision-old-auth
+supersedes: old-auth    # this decision replaces old-auth
 ```
 
 Use `links:` to express non-supersession relationships:
 
 ```markdown
-links: [related:decision-redis-cluster]
+links: [related:redis-cluster]
 ```
 
 ### Link Types
@@ -70,4 +70,4 @@ links: [related:decision-redis-cluster]
 - **Tags are required** — at least one tag (not empty `[]`)
 - **Lead paragraph is mandatory** — the first non-empty line after `# Title` must explain "why" and be at least 20 characters. Signals without this are marked invalid and excluded from the brief.
 - Source field is optional (hooks auto-set `git:<hash>` or `plan:<file>`)
-- **Slug matching tip:** Use a slug that matches the commit subject so auto-ingest defers to your manual signal. E.g., if the commit will be "feat: switch to Redis for caching", name the signal `decision-feat-switch-to-redis-for-caching.md`.
+- **Slug matching tip:** Use a slug that matches the commit subject so auto-ingest defers to your manual signal. E.g., if the commit will be "feat: switch to Redis for caching", name the signal `feat-switch-to-redis-for-caching.md`.

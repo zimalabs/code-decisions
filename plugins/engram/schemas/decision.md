@@ -1,6 +1,6 @@
 # Decision — Why we chose X
 
-File: `.engram/signals/decision-{slug}.md`
+File: `.engram/decisions/{slug}.md`
 
 ## Frontmatter
 
@@ -18,8 +18,8 @@ File: `.engram/signals/decision-{slug}.md`
 ---
 date: YYYY-MM-DD
 tags: [topic1, topic2]
-supersedes: decision-old-slug    # optional: replaces a prior decision
-links: [related:finding-x]       # optional: related, blocks, blocked-by
+supersedes: old-slug    # optional: replaces a prior decision
+links: [related:some-x]          # optional: related, blocks, blocked-by
 ---
 
 # Title of the decision

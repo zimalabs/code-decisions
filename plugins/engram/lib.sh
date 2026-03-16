@@ -20,12 +20,50 @@ _check_fts5() {
   fi
 }
 
+# ── Migration ─────────────────────────────────────────────────────────
+
+_migrate_signals_to_decisions() {
+  local dir="$1"
+
+  # Migrate signals/ → decisions/ if old layout exists
+  if [ -d "$dir/signals" ] && [ ! -d "$dir/decisions" ]; then
+    mv "$dir/signals" "$dir/decisions"
+  fi
+
+  # Strip decision- prefix from filenames in decisions/ and _private/
+  local target_dir
+  for target_dir in "$dir/decisions" "$dir/_private"; do
+    [ -d "$target_dir" ] || continue
+    for f in "$target_dir"/decision-*.md; do
+      [ -f "$f" ] || continue
+      local base
+      base=$(basename "$f")
+      local new_name="${base#decision-}"
+      [ "$base" = "$new_name" ] && continue
+      mv "$f" "$target_dir/$new_name"
+    done
+  done
+
+  # Rewrite supersedes: and links: frontmatter to strip decision- prefix
+  local target_dir2
+  for target_dir2 in "$dir/decisions" "$dir/_private"; do
+    [ -d "$target_dir2" ] || continue
+    for f in "$target_dir2"/*.md; do
+      [ -f "$f" ] || continue
+      if grep -qE '^(supersedes|links):.*decision-' "$f" 2>/dev/null; then
+        sed -i '' 's/\(supersedes: *\)decision-/\1/g; s/\(related:\)decision-/\1/g; s/\(blocks:\)decision-/\1/g; s/\(blocked-by:\)decision-/\1/g' "$f"
+      fi
+    done
+  done
+}
+
 # ── Init ──────────────────────────────────────────────────────────────
 
 engram_init() {
   local dir="$1"
   _check_fts5
-  mkdir -p "$dir"/signals
+  _migrate_signals_to_decisions "$dir"
+  mkdir -p "$dir"/decisions
   mkdir -p "$dir"/_private
   if [ ! -f "$dir/.gitignore" ]; then
     printf 'index.db\nbrief.md\n_private/\n' > "$dir/.gitignore"
@@ -265,7 +303,7 @@ engram_ingest_commits() {
     fi
 
     # Dedup: skip if file with this source already exists (public or private)
-    if grep -rql "source: git:$hash" "$dir/signals/" 2>/dev/null; then
+    if grep -rql "source: git:$hash" "$dir/decisions/" 2>/dev/null; then
       continue
     fi
     if grep -rql "source: git:$hash" "$dir/_private/" 2>/dev/null; then
@@ -278,13 +316,13 @@ engram_ingest_commits() {
     slug=$(_slugify "$subject")
     [ -z "$slug" ] && slug="commit-${hash:0:7}"
 
-    local filepath="$dir/signals/decision-${slug}.md"
+    local filepath="$dir/decisions/${slug}.md"
 
     # Manual signal with same slug already exists — defer to it
     if [ -f "$filepath" ]; then
       continue
     fi
-    if [ -f "$dir/_private/decision-${slug}.md" ]; then
+    if [ -f "$dir/_private/${slug}.md" ]; then
       continue
     fi
 
@@ -390,7 +428,7 @@ engram_ingest_plans() {
     basename=$(basename "$plan_file" .md)
 
     # Dedup: skip if file with this source already exists
-    if [ -n "$(find "$dir/signals" -name '*.md' 2>/dev/null)" ] && grep -rql "source: plan:$basename" "$dir/signals/" 2>/dev/null; then
+    if [ -n "$(find "$dir/decisions" -name '*.md' 2>/dev/null)" ] && grep -rql "source: plan:$basename" "$dir/decisions/" 2>/dev/null; then
       continue
     fi
 
@@ -410,7 +448,7 @@ engram_ingest_plans() {
     slug=$(_slugify "$title")
     [ -z "$slug" ] && slug="plan-$basename"
 
-    local filepath="$dir/signals/decision-plan-${slug}.md"
+    local filepath="$dir/decisions/plan-${slug}.md"
 
     cat > "$filepath" << SIGNAL
 ---
@@ -455,7 +493,7 @@ engram_reindex() {
   fi
 
   # Index public signals
-  for f in "$dir/signals"/*.md; do
+  for f in "$dir/decisions"/*.md; do
     [ -f "$f" ] || continue
     _index_file "$dir" "$f" 0
   done
@@ -770,7 +808,7 @@ engram_uncommitted_summary() {
   git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
 
   local uncommitted
-  uncommitted=$(git status --porcelain "$dir/signals" "$dir/_private" 2>/dev/null | grep -v '^$')
+  uncommitted=$(git status --porcelain "$dir/decisions" "$dir/_private" 2>/dev/null | grep -v '^$')
   [ -z "$uncommitted" ] && return 0
 
   local count

@@ -2,7 +2,7 @@
 type: decision
 date: 2026-03-16
 tags: [ci, sqlite, macos]
-links: [related:decision-add-ci-workflow-security-policy-funding-faq-and-go]
+links: [related:add-ci-workflow-security-policy-funding-faq-and-go]
 source: git:e24fce42854a1757f4e753bd21e2d1fb7e4ebc14
 ---
 

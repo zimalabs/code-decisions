@@ -2,7 +2,7 @@
 type: decision
 date: 2026-03-16
 tags: [cleanup, signals]
-links: [related:decision-reorganize-repo-to-plugin-marketplace-structure]
+links: [related:reorganize-repo-to-plugin-marketplace-structure]
 source: git:8f257cf81f767446715d55c670c2f316a8794274
 ---
 

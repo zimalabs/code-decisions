@@ -2,7 +2,7 @@
 type: decision
 date: 2026-03-16
 tags: [repo-structure, plugin]
-links: [related:decision-remove-old-engram-decisions-files-left-over-from-d]
+links: [related:remove-old-engram-decisions-files-left-over-from-d]
 source: git:52326197eeb7f2eb5a4393e831b41ee59a60ce29
 ---
 

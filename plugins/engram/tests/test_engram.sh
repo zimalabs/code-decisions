@@ -144,7 +144,7 @@ test_init() {
   source "$LIB"
   engram_init "$dir"
 
-  assert_dir_exists "signals dir" "$dir/signals"
+  assert_dir_exists "decisions dir" "$dir/decisions"
   assert_dir_exists "_private dir" "$dir/_private"
   assert_file_exists "gitignore" "$dir/.gitignore"
   assert_file_exists "index.db" "$dir/index.db"
@@ -189,6 +189,67 @@ test_init_upgrade_gitignore() {
   assert_contains "gitignore has _private/" "$gitignore" "_private/"
 }
 
+test_migrate_signals_to_decisions() {
+  echo "test_migrate_signals_to_decisions:"
+  local dir="$TEST_DIR/test-migrate/.engram"
+
+  source "$LIB"
+
+  # Create old-style layout manually (before engram_init runs migration)
+  mkdir -p "$dir/signals"
+  mkdir -p "$dir/_private"
+
+  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [infrastructure]
+supersedes: decision-old-cache
+links: [related:decision-redis-perf]
+---
+
+# Use Redis for caching
+
+Already in our stack for session storage and pub/sub needs.
+EOF
+
+  cat > "$dir/_private/decision-secret-deal.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [business]
+---
+
+# Secret deal
+
+Private info about a deal with a major vendor partner.
+EOF
+
+  # Run init — should trigger migration
+  engram_init "$dir"
+
+  # Old dir should be gone, new dir should exist
+  assert_dir_exists "decisions dir exists" "$dir/decisions"
+
+  # Files should have decision- prefix stripped
+  assert_file_exists "public file renamed" "$dir/decisions/use-redis.md"
+  assert_file_exists "private file renamed" "$dir/_private/secret-deal.md"
+
+  # Frontmatter should have decision- prefix stripped from supersedes/links
+  local content
+  content=$(cat "$dir/decisions/use-redis.md")
+  assert_contains "supersedes stripped" "$content" "supersedes: old-cache"
+  assert_not_contains "supersedes no decision- prefix" "$content" "supersedes: decision-"
+  assert_contains "links stripped" "$content" "related:redis-perf"
+  assert_not_contains "links no decision- prefix" "$content" "related:decision-"
+
+  # Reindex should work with new paths
+  engram_reindex "$dir"
+  local count
+  count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals;")
+  assert_eq "migrated signals indexed" "$count" "2"
+}
+
 test_write_decision() {
   echo "test_write_decision:"
   local dir="$TEST_DIR/test-write-decision/.engram"
@@ -197,7 +258,7 @@ test_write_decision() {
   engram_init "$dir"
 
   # Write a decision signal file
-  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+  cat > "$dir/decisions/use-redis.md" << 'EOF'
 ---
 date: 2026-03-14
 tags: [infrastructure, caching]
@@ -274,12 +335,12 @@ test_ingest_commits() {
 
   # Should have 3 decision files (feat, refactor, migrate) out of 7 commits
   local file_count
-  file_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "3 decisions from 7 commits" "$file_count" "3"
 
   # Verify files have source: git:<hash>
   local has_source
-  has_source=$(grep -rl "source: git:" "$dir/signals/" | wc -l | tr -d ' ')
+  has_source=$(grep -rl "source: git:" "$dir/decisions/" | wc -l | tr -d ' ')
   assert_eq "all have git source" "$has_source" "3"
 
   cd "$SCRIPT_DIR"
@@ -312,12 +373,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
   # Should have 2 decision files
   local file_count
-  file_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "2 decisions created" "$file_count" "2"
 
   # Verify body appears in the OAuth2 signal file
   local oauth_file
-  oauth_file=$(grep -rl "OAuth2" "$dir/signals/" | head -1)
+  oauth_file=$(grep -rl "OAuth2" "$dir/decisions/" | head -1)
   local content
   content=$(cat "$oauth_file")
   assert_contains "body included in signal" "$content" "token-based auth"
@@ -325,7 +386,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
   # Verify the no-body commit doesn't have extra blank lines between title and stat
   local api_file
-  api_file=$(grep -rl "API gateway" "$dir/signals/" | head -1)
+  api_file=$(grep -rl "API gateway" "$dir/decisions/" | head -1)
   local api_content
   api_content=$(cat "$api_file")
   assert_contains "no-body signal has stat" "$api_content" "api.rb"
@@ -346,11 +407,11 @@ test_ingest_dedup() {
   # Ingest twice
   engram_ingest_commits "$dir"
   local first_count
-  first_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  first_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
 
   engram_ingest_commits "$dir"
   local second_count
-  second_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  second_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
 
   assert_eq "no duplicates after second ingest" "$first_count" "$second_count"
 
@@ -375,7 +436,7 @@ test_ingest_manual_signal_suppresses() {
   engram_init "$dir"
 
   # Pre-create a manual signal with the same slug auto-ingest would use
-  cat > "$dir/signals/decision-feat-add-widget.md" << 'EOF'
+  cat > "$dir/decisions/feat-add-widget.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -389,13 +450,13 @@ EOF
 
   engram_ingest_commits "$dir"
 
-  # Should still have only 1 file — no decision-feat-add-widget-<hash>.md created
+  # Should still have only 1 file — no feat-add-widget-<hash>.md created
   local file_count
-  file_count=$(find "$dir/signals" -name 'decision-feat-add-widget*' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/decisions" -name 'feat-add-widget*' | wc -l | tr -d ' ')
   assert_eq "manual signal suppresses auto-ingest" "$file_count" "1"
 
   # Verify the file content is the manual one (no source: git: line)
-  assert_not_contains "manual signal preserved" "$(cat "$dir/signals/decision-feat-add-widget.md")" "source: git:"
+  assert_not_contains "manual signal preserved" "$(cat "$dir/decisions/feat-add-widget.md")" "source: git:"
 
   cd "$SCRIPT_DIR"
 }
@@ -418,7 +479,7 @@ test_ingest_private_signal_suppresses() {
   engram_init "$dir"
 
   # Pre-create a private signal with the same slug
-  cat > "$dir/_private/decision-feat-switch-to-redis-for-caching.md" << 'EOF'
+  cat > "$dir/_private/feat-switch-to-redis-for-caching.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -434,7 +495,7 @@ EOF
 
   # No public signal should be created
   local public_count
-  public_count=$(find "$dir/signals" -name 'decision-feat-switch-to-redis*' | wc -l | tr -d ' ')
+  public_count=$(find "$dir/decisions" -name 'feat-switch-to-redis*' | wc -l | tr -d ' ')
   assert_eq "private signal suppresses auto-ingest" "$public_count" "0"
 
   cd "$SCRIPT_DIR"
@@ -460,11 +521,11 @@ test_ingest_no_manual_still_creates() {
 
   # Auto-ingest should create the signal when no manual signal exists
   local file_count
-  file_count=$(find "$dir/signals" -name 'decision-feat-add-api-gateway*' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/decisions" -name 'feat-add-api-gateway*' | wc -l | tr -d ' ')
   assert_eq "auto-ingest creates signal when no manual" "$file_count" "1"
 
   # Verify it has source: git:
-  assert_contains "auto-ingest has git source" "$(cat "$dir/signals"/decision-feat-add-api-gateway*.md)" "source: git:"
+  assert_contains "auto-ingest has git source" "$(cat "$dir/decisions"/feat-add-api-gateway*.md)" "source: git:"
 
   cd "$SCRIPT_DIR"
 }
@@ -497,7 +558,7 @@ test_ingest_brownfield() {
 
   # Brownfield scans last 50 commits. Of those 50, 40 are feat (decision) and 10 are fix (skip).
   local file_count
-  file_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "brownfield: only decisions from last 50" "$file_count" "40"
 
   cd "$SCRIPT_DIR"
@@ -530,12 +591,12 @@ EOF
 
   # Should have created a decision file from the plan
   local plan_files
-  plan_files=$(grep -rl "source: plan:auth-redesign" "$dir/signals/" 2>/dev/null | wc -l | tr -d ' ')
+  plan_files=$(grep -rl "source: plan:auth-redesign" "$dir/decisions/" 2>/dev/null | wc -l | tr -d ' ')
   assert_eq "plan ingested" "$plan_files" "1"
 
   # Verify content includes the context section
   local content
-  content=$(cat "$dir/signals"/decision-plan*auth*.md 2>/dev/null || echo "")
+  content=$(cat "$dir/decisions"/plan*auth*.md 2>/dev/null || echo "")
   assert_contains "plan has context content" "$content" "JWT"
 
   cd "$SCRIPT_DIR"
@@ -549,7 +610,7 @@ test_reindex() {
   engram_init "$dir"
 
   # Write some signal files
-  cat > "$dir/signals/decision-test-a.md" << 'EOF'
+  cat > "$dir/decisions/test-a.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -560,7 +621,7 @@ date: 2026-03-14
 Content A
 EOF
 
-  cat > "$dir/signals/decision-test-b.md" << 'EOF'
+  cat > "$dir/decisions/test-b.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -593,7 +654,7 @@ test_brief() {
   engram_init "$dir"
 
   # Write signals
-  cat > "$dir/signals/decision-pick-redis.md" << 'EOF'
+  cat > "$dir/decisions/pick-redis.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -624,7 +685,7 @@ test_fts_search() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-postgresql.md" << 'EOF'
+  cat > "$dir/decisions/postgresql.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -635,7 +696,7 @@ date: 2026-03-14
 Better JSON support and window functions.
 EOF
 
-  cat > "$dir/signals/decision-fts5.md" << 'EOF'
+  cat > "$dir/decisions/fts5.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -670,14 +731,14 @@ test_frontmatter_parsing() {
   engram_init "$dir"
 
   # File with no frontmatter at all
-  cat > "$dir/signals/decision-no-frontmatter.md" << 'EOF'
+  cat > "$dir/decisions/no-frontmatter.md" << 'EOF'
 # Decision with no frontmatter
 
 Just a plain markdown file with a heading.
 EOF
 
   # File with partial frontmatter (missing tags)
-  cat > "$dir/signals/decision-partial.md" << 'EOF'
+  cat > "$dir/decisions/partial.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -689,7 +750,7 @@ Only date, no tags or source.
 EOF
 
   # File with full frontmatter
-  cat > "$dir/signals/decision-full.md" << 'EOF'
+  cat > "$dir/decisions/full.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -765,7 +826,7 @@ test_incremental_ingest() {
   engram_ingest_commits "$dir"
 
   local first_count
-  first_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  first_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "3 initial commits" "$first_count" "3"
 
   # Add 2 more decision-worthy commits
@@ -777,7 +838,7 @@ test_incremental_ingest() {
   engram_ingest_commits "$dir"
 
   local second_count
-  second_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
+  second_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "5 after incremental" "$second_count" "5"
 
   cd "$SCRIPT_DIR"
@@ -790,7 +851,7 @@ test_file_column() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-test-file.md" << 'EOF'
+  cat > "$dir/decisions/test-file.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -805,7 +866,7 @@ EOF
 
   local file_val
   file_val=$(sqlite3 "$dir/index.db" "SELECT file FROM signals LIMIT 1;")
-  assert_contains "file column has path" "$file_val" "signals/decision-test-file.md"
+  assert_contains "file column has path" "$file_val" "decisions/test-file.md"
 }
 
 test_private_signal_indexed() {
@@ -815,7 +876,7 @@ test_private_signal_indexed() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/_private/decision-secret-deal.md" << 'EOF'
+  cat > "$dir/_private/secret-deal.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -842,7 +903,7 @@ test_brief_excludes_private() {
   engram_init "$dir"
 
   # Write a public signal
-  cat > "$dir/signals/decision-public-choice.md" << 'EOF'
+  cat > "$dir/decisions/public-choice.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -855,7 +916,7 @@ Visible to everyone in the team and included in the brief.
 EOF
 
   # Write a private signal
-  cat > "$dir/_private/decision-private-deal.md" << 'EOF'
+  cat > "$dir/_private/private-deal.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -884,7 +945,7 @@ test_private_queryable() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/_private/decision-competitor-intel.md" << 'EOF'
+  cat > "$dir/_private/competitor-intel.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -911,7 +972,7 @@ test_public_signals_unchanged() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-normal.md" << 'EOF'
+  cat > "$dir/decisions/normal.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -950,7 +1011,7 @@ test_uncommitted_summary() {
   engram_init "$dir"
 
   # Write an uncommitted signal file
-  cat > "$dir/signals/decision-test-uncommitted.md" << 'EOF'
+  cat > "$dir/decisions/test-uncommitted.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -986,7 +1047,7 @@ test_uncommitted_summary_no_git() {
   engram_init "$dir"
 
   # Write a signal file (not in a git repo)
-  cat > "$dir/signals/decision-no-git.md" << 'EOF'
+  cat > "$dir/decisions/no-git.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -1024,7 +1085,7 @@ test_session_end_output() {
   engram_reindex "$dir"
   engram_brief "$dir"
   # Add .gitkeep to empty dirs so git tracks them
-  touch "$dir/signals/.gitkeep" "$dir/_private/.gitkeep"
+  touch "$dir/decisions/.gitkeep" "$dir/_private/.gitkeep"
   git add .engram/ && git commit -q -m "engram: init"
 
   # Run session-end hook with CLAUDE_PLUGIN_ROOT set
@@ -1041,7 +1102,7 @@ test_session_end_output() {
   assert_eq "empty JSON when no signals" "$output" "{}"
 
   # Test 2: with uncommitted signal — should still output empty JSON
-  cat > "$dir/signals/decision-test-end.md" << 'EOF'
+  cat > "$dir/decisions/test-end.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -1067,7 +1128,7 @@ test_supersedes_frontmatter() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-old-auth.md" << 'EOF'
+  cat > "$dir/decisions/old-auth.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-10
@@ -1078,11 +1139,11 @@ date: 2026-03-10
 Server-side sessions with cookies.
 EOF
 
-  cat > "$dir/signals/decision-new-auth.md" << 'EOF'
+  cat > "$dir/decisions/new-auth.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
-supersedes: decision-old-auth
+supersedes: old-auth
 ---
 
 # Use JWT authentication
@@ -1094,12 +1155,12 @@ EOF
 
   # Check supersedes column
   local supersedes_val
-  supersedes_val=$(sqlite3 "$dir/index.db" "SELECT supersedes FROM signals WHERE file_stem='decision-new-auth';")
-  assert_eq "supersedes column populated" "$supersedes_val" "decision-old-auth"
+  supersedes_val=$(sqlite3 "$dir/index.db" "SELECT supersedes FROM signals WHERE file_stem='new-auth';")
+  assert_eq "supersedes column populated" "$supersedes_val" "old-auth"
 
   # Check links table
   local link_count
-  link_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-new-auth' AND target_file='decision-old-auth' AND rel_type='supersedes';")
+  link_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='new-auth' AND target_file='old-auth' AND rel_type='supersedes';")
   assert_eq "supersedes link in links table" "$link_count" "1"
 }
 
@@ -1110,11 +1171,11 @@ test_links_frontmatter() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+  cat > "$dir/decisions/use-redis.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
-links: [related:finding-fts5-perf, blocks:issue-ci-timeout]
+links: [related:fts5-perf, blocks:ci-timeout]
 ---
 
 # Use Redis for caching
@@ -1125,15 +1186,15 @@ EOF
   engram_reindex "$dir"
 
   local related_count
-  related_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-use-redis' AND target_file='finding-fts5-perf' AND rel_type='related';")
+  related_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='use-redis' AND target_file='fts5-perf' AND rel_type='related';")
   assert_eq "related link exists" "$related_count" "1"
 
   local blocks_count
-  blocks_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-use-redis' AND target_file='issue-ci-timeout' AND rel_type='blocks';")
+  blocks_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='use-redis' AND target_file='ci-timeout' AND rel_type='blocks';")
   assert_eq "blocks link exists" "$blocks_count" "1"
 
   local total_links
-  total_links=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-use-redis';")
+  total_links=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='use-redis';")
   assert_eq "2 links total" "$total_links" "2"
 }
 
@@ -1144,7 +1205,7 @@ test_excerpt_extraction() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-test-excerpt.md" << 'EOF'
+  cat > "$dir/decisions/test-excerpt.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1161,7 +1222,7 @@ EOF
   engram_reindex "$dir"
 
   local excerpt
-  excerpt=$(sqlite3 "$dir/index.db" "SELECT excerpt FROM signals WHERE file_stem='decision-test-excerpt';")
+  excerpt=$(sqlite3 "$dir/index.db" "SELECT excerpt FROM signals WHERE file_stem='test-excerpt';")
   assert_contains "excerpt has first body line" "$excerpt" "Better JSON support"
 }
 
@@ -1172,7 +1233,7 @@ test_file_stem_column() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+  cat > "$dir/decisions/use-redis.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1187,7 +1248,7 @@ EOF
 
   local stem
   stem=$(sqlite3 "$dir/index.db" "SELECT file_stem FROM signals LIMIT 1;")
-  assert_eq "file_stem is basename without .md" "$stem" "decision-use-redis"
+  assert_eq "file_stem is basename without .md" "$stem" "use-redis"
 }
 
 test_brief_hides_superseded() {
@@ -1197,7 +1258,7 @@ test_brief_hides_superseded() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-old-cache.md" << 'EOF'
+  cat > "$dir/decisions/old-cache.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-10
@@ -1209,12 +1270,12 @@ tags: [infrastructure]
 Fast and simple key-value store for basic caching needs.
 EOF
 
-  cat > "$dir/signals/decision-new-cache.md" << 'EOF'
+  cat > "$dir/decisions/new-cache.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
 tags: [infrastructure]
-supersedes: decision-old-cache
+supersedes: old-cache
 ---
 
 # Use Redis for caching
@@ -1240,7 +1301,7 @@ test_brief_tag_grouping() {
   engram_init "$dir"
 
   # Create decisions with 3+ distinct primary tags
-  cat > "$dir/signals/decision-redis.md" << 'EOF'
+  cat > "$dir/decisions/redis.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1252,7 +1313,7 @@ tags: [infrastructure, caching]
 Already in our stack for session storage and we need pub/sub.
 EOF
 
-  cat > "$dir/signals/decision-jwt.md" << 'EOF'
+  cat > "$dir/decisions/jwt.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1264,7 +1325,7 @@ tags: [auth, security]
 Mobile clients need stateless token-based authentication.
 EOF
 
-  cat > "$dir/signals/decision-postgres.md" << 'EOF'
+  cat > "$dir/decisions/postgres.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1293,7 +1354,7 @@ test_brief_max_lines() {
 
   # Create enough signals to exceed 10-line cap
   for i in $(seq 1 20); do
-    cat > "$dir/signals/decision-bulk-$i.md" << EOF
+    cat > "$dir/decisions/bulk-$i.md" << EOF
 ---
 type: decision
 date: 2026-03-14
@@ -1327,7 +1388,7 @@ test_brief_excerpts() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-test-exc.md" << 'EOF'
+  cat > "$dir/decisions/test-exc.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1356,7 +1417,7 @@ test_supersession_chain() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-auth-v1.md" << 'EOF'
+  cat > "$dir/decisions/auth-v1.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-01
@@ -1367,11 +1428,11 @@ date: 2026-03-01
 Cookie-based sessions.
 EOF
 
-  cat > "$dir/signals/decision-auth-v2.md" << 'EOF'
+  cat > "$dir/decisions/auth-v2.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-10
-supersedes: decision-auth-v1
+supersedes: auth-v1
 ---
 
 # Auth v2: JWT
@@ -1379,11 +1440,11 @@ supersedes: decision-auth-v1
 Token-based auth.
 EOF
 
-  cat > "$dir/signals/decision-auth-v3.md" << 'EOF'
+  cat > "$dir/decisions/auth-v3.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
-supersedes: decision-auth-v2
+supersedes: auth-v2
 ---
 
 # Auth v3: OAuth2
@@ -1395,7 +1456,7 @@ EOF
 
   # Recursive CTE to walk the chain from v3 back to v1
   local chain
-  chain=$(sqlite3 "$dir/index.db" "WITH RECURSIVE chain(stem, depth) AS (SELECT file_stem, 0 FROM signals WHERE file_stem = 'decision-auth-v3' UNION ALL SELECT s.supersedes, c.depth + 1 FROM chain c JOIN signals s ON s.file_stem = c.stem WHERE s.supersedes != '') SELECT s.title FROM chain c JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth;")
+  chain=$(sqlite3 "$dir/index.db" "WITH RECURSIVE chain(stem, depth) AS (SELECT file_stem, 0 FROM signals WHERE file_stem = 'auth-v3' UNION ALL SELECT s.supersedes, c.depth + 1 FROM chain c JOIN signals s ON s.file_stem = c.stem WHERE s.supersedes != '') SELECT s.title FROM chain c JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth;")
   assert_contains "chain includes v3" "$chain" "Auth v3"
   assert_contains "chain includes v2" "$chain" "Auth v2"
   assert_contains "chain includes v1" "$chain" "Auth v1"
@@ -1408,11 +1469,11 @@ test_links_bidirectional() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+  cat > "$dir/decisions/use-redis.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
-links: [related:decision-redis-perf]
+links: [related:redis-perf]
 ---
 
 # Use Redis
@@ -1420,7 +1481,7 @@ links: [related:decision-redis-perf]
 For caching.
 EOF
 
-  cat > "$dir/signals/decision-redis-perf.md" << 'EOF'
+  cat > "$dir/decisions/redis-perf.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1435,13 +1496,13 @@ EOF
 
   # Query links from the target's perspective
   local from_target
-  from_target=$(sqlite3 "$dir/index.db" "SELECT source_file FROM links WHERE target_file='decision-redis-perf';")
-  assert_eq "link findable from target side" "$from_target" "decision-use-redis"
+  from_target=$(sqlite3 "$dir/index.db" "SELECT source_file FROM links WHERE target_file='redis-perf';")
+  assert_eq "link findable from target side" "$from_target" "use-redis"
 
   # Query links from the decision's perspective (it's the source)
   local from_decision
-  from_decision=$(sqlite3 "$dir/index.db" "SELECT target_file FROM links WHERE source_file='decision-use-redis';")
-  assert_eq "link findable from source side" "$from_decision" "decision-redis-perf"
+  from_decision=$(sqlite3 "$dir/index.db" "SELECT target_file FROM links WHERE source_file='use-redis';")
+  assert_eq "link findable from source side" "$from_decision" "redis-perf"
 }
 
 test_path_to_keywords() {
@@ -1478,7 +1539,7 @@ test_query_relevant() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+  cat > "$dir/decisions/use-redis.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1489,7 +1550,7 @@ date: 2026-03-14
 Already in our stack for session storage.
 EOF
 
-  cat > "$dir/signals/decision-jwt-auth.md" << 'EOF'
+  cat > "$dir/decisions/jwt-auth.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
@@ -1500,7 +1561,7 @@ date: 2026-03-15
 Token-based auth for mobile clients.
 EOF
 
-  cat > "$dir/_private/decision-secret.md" << 'EOF'
+  cat > "$dir/_private/secret.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1545,7 +1606,7 @@ test_query_relevant_excludes_superseded() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-old-cache.md" << 'EOF'
+  cat > "$dir/decisions/old-cache.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-10
@@ -1556,11 +1617,11 @@ date: 2026-03-10
 Fast and simple.
 EOF
 
-  cat > "$dir/signals/decision-new-cache.md" << 'EOF'
+  cat > "$dir/decisions/new-cache.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
-supersedes: decision-old-cache
+supersedes: old-cache
 ---
 
 # Use Redis for caching
@@ -1585,7 +1646,7 @@ test_tag_summary() {
 
   # Create 6 signals (need >= 5 for tag_summary to return anything)
   for i in 1 2 3; do
-    cat > "$dir/signals/decision-arch-$i.md" << EOF
+    cat > "$dir/decisions/arch-$i.md" << EOF
 ---
 type: decision
 date: 2026-03-14
@@ -1599,7 +1660,7 @@ EOF
   done
 
   for i in 1 2; do
-    cat > "$dir/signals/decision-testing-$i.md" << EOF
+    cat > "$dir/decisions/testing-$i.md" << EOF
 ---
 type: decision
 date: 2026-03-14
@@ -1612,7 +1673,7 @@ Content $i.
 EOF
   done
 
-  cat > "$dir/signals/decision-ci.md" << 'EOF'
+  cat > "$dir/decisions/ci.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1641,7 +1702,7 @@ test_tag_summary_few_signals() {
   engram_init "$dir"
 
   # Only 2 signals — below threshold
-  cat > "$dir/signals/decision-a.md" << 'EOF'
+  cat > "$dir/decisions/a.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1653,7 +1714,7 @@ tags: [foo]
 Content.
 EOF
 
-  cat > "$dir/signals/decision-b.md" << 'EOF'
+  cat > "$dir/decisions/b.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1679,7 +1740,7 @@ test_post_tool_context_output() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-auth-handler.md" << 'EOF'
+  cat > "$dir/decisions/auth-handler.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1714,7 +1775,7 @@ EOF
   fi
 
   # Test with .engram path — should skip
-  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":".engram/signals/decision-foo.md"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$-skip" bash "$hook_script" 2>/dev/null)
+  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":".engram/decisions/foo.md"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$-skip" bash "$hook_script" 2>/dev/null)
   assert_eq "skips .engram paths" "$output" "{}"
 
   # Test with test file — should skip
@@ -1729,7 +1790,7 @@ test_pre_compact_output() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-compact-test.md" << 'EOF'
+  cat > "$dir/decisions/compact-test.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1904,7 +1965,7 @@ test_validate_signal_valid() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-valid-test.md" << 'EOF'
+  cat > "$dir/decisions/valid-test.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -1920,7 +1981,7 @@ Enforce structure at write time to ensure all decisions include rationale, impro
 EOF
 
   local rc=0
-  _validate_signal "$dir/signals/decision-valid-test.md" 2>/dev/null || rc=$?
+  _validate_signal "$dir/decisions/valid-test.md" 2>/dev/null || rc=$?
   assert_eq "valid signal passes" "$rc" "0"
 }
 
@@ -1931,7 +1992,7 @@ test_validate_signal_missing_why() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-no-why.md" << 'EOF'
+  cat > "$dir/decisions/no-why.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -1943,7 +2004,7 @@ tags: [test]
 EOF
 
   local rc=0
-  _validate_signal "$dir/signals/decision-no-why.md" 2>/dev/null || rc=$?
+  _validate_signal "$dir/decisions/no-why.md" 2>/dev/null || rc=$?
   assert_eq "missing lead paragraph fails" "$rc" "1"
 }
 
@@ -1954,7 +2015,7 @@ test_validate_signal_missing_tags() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-no-tags.md" << 'EOF'
+  cat > "$dir/decisions/no-tags.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -1967,7 +2028,7 @@ This decision has no tags which should fail validation checks.
 EOF
 
   local rc=0
-  _validate_signal "$dir/signals/decision-no-tags.md" 2>/dev/null || rc=$?
+  _validate_signal "$dir/decisions/no-tags.md" 2>/dev/null || rc=$?
   assert_eq "empty tags fails" "$rc" "1"
 }
 
@@ -1978,7 +2039,7 @@ test_validate_signal_short_why() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/signals/decision-short-why.md" << 'EOF'
+  cat > "$dir/decisions/short-why.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -1991,7 +2052,7 @@ Too short.
 EOF
 
   local rc=0
-  _validate_signal "$dir/signals/decision-short-why.md" 2>/dev/null || rc=$?
+  _validate_signal "$dir/decisions/short-why.md" 2>/dev/null || rc=$?
   assert_eq "short lead paragraph fails" "$rc" "1"
 }
 
@@ -2003,7 +2064,7 @@ test_reindex_marks_invalid() {
   engram_init "$dir"
 
   # Valid signal
-  cat > "$dir/signals/decision-good.md" << 'EOF'
+  cat > "$dir/decisions/good.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -2016,7 +2077,7 @@ This decision includes a proper lead paragraph explaining why it was made.
 EOF
 
   # Invalid signal (no tags, no lead paragraph)
-  cat > "$dir/signals/decision-bad.md" << 'EOF'
+  cat > "$dir/decisions/bad.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -2029,11 +2090,11 @@ EOF
   engram_reindex "$dir" 2>/dev/null
 
   local valid_good
-  valid_good=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='decision-good';")
+  valid_good=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='good';")
   assert_eq "good signal is valid=1" "$valid_good" "1"
 
   local valid_bad
-  valid_bad=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='decision-bad';")
+  valid_bad=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='bad';")
   assert_eq "bad signal is valid=0" "$valid_bad" "0"
 }
 
@@ -2045,7 +2106,7 @@ test_brief_excludes_invalid() {
   engram_init "$dir"
 
   # Valid signal
-  cat > "$dir/signals/decision-visible.md" << 'EOF'
+  cat > "$dir/decisions/visible.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -2058,7 +2119,7 @@ This decision has proper rationale and should appear in the brief output.
 EOF
 
   # Invalid signal (missing tags and short body)
-  cat > "$dir/signals/decision-hidden.md" << 'EOF'
+  cat > "$dir/decisions/hidden.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -2126,6 +2187,8 @@ echo ""
 test_init_private_dirs
 echo ""
 test_init_upgrade_gitignore
+echo ""
+test_migrate_signals_to_decisions
 echo ""
 test_write_decision
 echo ""
