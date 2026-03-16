@@ -1,6 +1,8 @@
 ---
 type: decision
 date: 2026-03-16
+tags: [ci, launch, docs]
+links: [related:decision-fix-ci-install-homebrew-sqlite-with-fts5-on-macos, related:decision-remove-good-first-issues-md-from-repo]
 source: git:168b6a3eef1ee4dbf69bdecbdb1bcee8e66c4589
 ---
 
@@ -21,3 +23,11 @@ Prepares repo for public launch:
  README.md                | 60 ++++++++++++++++++++++++------
  good-first-issues.md     | 96 ++++++++++++++++++++++++++++++++++++++++++++++++
  5 files changed, 204 insertions(+), 11 deletions(-)
+
+## Rationale
+
+OSS launch readiness — needed CI, security policy, and community docs before going public.
+
+## Alternatives
+
+None — these are table stakes for any OSS launch.
