@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS signals (
     excerpt TEXT NOT NULL DEFAULT '',
     supersedes TEXT NOT NULL DEFAULT '',
     file_stem TEXT NOT NULL DEFAULT '',
+    valid INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

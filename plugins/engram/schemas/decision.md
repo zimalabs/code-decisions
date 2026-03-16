@@ -7,7 +7,7 @@ File: `.engram/signals/decision-{slug}.md`
 | Field | Required | Description |
 |---|---|---|
 | `date` | yes | ISO date (YYYY-MM-DD) |
-| `tags` | no | Bracket list: `[topic1, topic2]` |
+| `tags` | yes | Bracket list with at least one tag: `[topic1, topic2]` |
 | `source` | no | Origin: `git:<hash>`, `plan:<file>` (auto-set by hooks) |
 | `supersedes` | no | File stem of the signal this replaces |
 | `links` | no | Bracket list: `[related:stem, blocks:stem]` |
@@ -24,7 +24,7 @@ links: [related:finding-x]       # optional: related, blocks, blocked-by
 
 # Title of the decision
 
-Why this choice was made.
+Why this choice was made. This lead paragraph is required and must be at least 20 characters — it explains the "why" behind the decision.
 
 ## Alternatives
 - Option A — why not
@@ -39,7 +39,17 @@ What we gave up or risk by choosing this.
 
 ## Body Sections
 
-- **Lead paragraph** (required): One-line summary of what was decided and why.
+- **Lead paragraph** (required): One-line summary of what was decided and why. Must be at least 20 characters.
 - **Alternatives** (recommended): What else was considered and why it was rejected.
 - **Rationale** (recommended): The reasoning and constraints that led to this choice.
 - **Trade-offs** (optional): What was given up or risked.
+
+## Validation Rules
+
+Signals are validated at index time. Invalid signals are indexed with `valid=0` and excluded from the brief.
+
+1. **Frontmatter** — must open and close with `---`
+2. **date:** — required, ISO format (YYYY-MM-DD)
+3. **tags:** — required, at least one tag (not empty `[]`)
+4. **H1 title** — required (`# ...` after frontmatter)
+5. **Lead paragraph** — required, first non-empty non-heading line after the title, minimum 20 characters

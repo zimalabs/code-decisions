@@ -67,6 +67,7 @@ links: [related:decision-redis-cluster]
 - Include the *why*, not just the *what*
 - Reference specific files, PRs, or conversations when relevant
 - Keep individual signals focused on one thing
-- Tags are optional but help with filtering
+- **Tags are required** — at least one tag (not empty `[]`)
+- **Lead paragraph is mandatory** — the first non-empty line after `# Title` must explain "why" and be at least 20 characters. Signals without this are marked invalid and excluded from the brief.
 - Source field is optional (hooks auto-set `git:<hash>` or `plan:<file>`)
 - **Slug matching tip:** Use a slug that matches the commit subject so auto-ingest defers to your manual signal. E.g., if the commit will be "feat: switch to Redis for caching", name the signal `decision-feat-switch-to-redis-for-caching.md`.

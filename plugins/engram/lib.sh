@@ -58,7 +58,7 @@ _file_stem() {
 }
 
 _extract_excerpt() {
-  echo "$1" | grep -v '^$' | grep -v '^#' | head -1 | cut -c1-120
+  echo "$1" | { grep -v '^$' || true; } | { grep -v '^#' || true; } | head -1 | cut -c1-120
 }
 
 _normalize_tags() {
@@ -87,6 +87,91 @@ _parse_links() {
   echo "$str" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | while IFS=: read -r rel target; do
     [ -n "$rel" ] && [ -n "$target" ] && printf '%s|%s\n' "$rel" "$target"
   done
+}
+
+# ── Signal validation ────────────────────────────────────────────────
+
+_validate_signal() {
+  local filepath="$1"
+  local errors=""
+
+  local in_frontmatter=0
+  local has_open=0 has_close=0
+  local has_date=0 has_tags=0 tags_empty=1
+  local has_title=0
+  local lead_paragraph=""
+  local past_frontmatter=0 past_title=0
+
+  while IFS= read -r line; do
+    if [ "$past_frontmatter" -eq 0 ]; then
+      if [ "$line" = "---" ]; then
+        if [ "$has_open" -eq 0 ]; then
+          has_open=1
+          in_frontmatter=1
+          continue
+        else
+          has_close=1
+          past_frontmatter=1
+          continue
+        fi
+      fi
+      if [ "$in_frontmatter" -eq 1 ]; then
+        case "$line" in
+          date:*)
+            local date_val="${line#date:}"; date_val="${date_val# }"
+            if printf '%s' "$date_val" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+              has_date=1
+            fi
+            ;;
+          tags:*)
+            local tags_val="${line#tags:}"; tags_val="${tags_val# }"
+            has_tags=1
+            case "$tags_val" in
+              '[]'|'') tags_empty=1 ;;
+              *) tags_empty=0 ;;
+            esac
+            ;;
+        esac
+        continue
+      fi
+    fi
+
+    # Past frontmatter: look for title and lead paragraph
+    if [ "$has_title" -eq 0 ] && [[ "$line" == "# "* ]]; then
+      has_title=1
+      past_title=1
+      continue
+    fi
+
+    if [ "$past_title" -eq 1 ] && [ -z "$lead_paragraph" ]; then
+      # Skip blank lines and headings
+      [ -z "$line" ] && continue
+      [[ "$line" == "#"* ]] && continue
+      lead_paragraph="$line"
+    fi
+  done < "$filepath"
+
+  if [ "$has_open" -eq 0 ] || [ "$has_close" -eq 0 ]; then
+    errors="${errors}missing frontmatter delimiters (---); "
+  fi
+  if [ "$has_date" -eq 0 ]; then
+    errors="${errors}missing or invalid date: field (need YYYY-MM-DD); "
+  fi
+  if [ "$has_tags" -eq 0 ] || [ "$tags_empty" -eq 1 ]; then
+    errors="${errors}tags: must have at least one tag (not empty []); "
+  fi
+  if [ "$has_title" -eq 0 ]; then
+    errors="${errors}missing H1 title (# ...); "
+  fi
+  if [ -z "$lead_paragraph" ] || [ "${#lead_paragraph}" -lt 20 ]; then
+    errors="${errors}lead paragraph after title must exist and be >= 20 chars (explains why); "
+  fi
+
+  if [ -n "$errors" ]; then
+    echo "engram: invalid signal $(basename "$filepath"): $errors" >&2
+    return 1
+  fi
+  return 0
 }
 
 # ── Commit classification ────────────────────────────────────────────
@@ -441,6 +526,13 @@ _index_file() {
   local excerpt
   excerpt=$(_extract_excerpt "$body")
 
+  # Validate signal
+  local valid=1
+  if ! _validate_signal "$filepath" 2>/dev/null; then
+    valid=0
+    echo "engram: warning: $(basename "$filepath") is incomplete (missing rationale)" >&2
+  fi
+
   # Combine title + body as content
   local content="$title"$'\n'"$body"
 
@@ -455,7 +547,7 @@ _index_file() {
   esc_supersedes=$(printf '%s' "$fm_supersedes" | sed "s/'/''/g")
   esc_file_stem=$(printf '%s' "$file_stem" | sed "s/'/''/g")
 
-  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_supersedes', '$esc_file_stem');"
+  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, valid) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_supersedes', '$esc_file_stem', $valid);"
 
   # Insert links
   if [ -n "$fm_supersedes" ]; then
@@ -506,18 +598,21 @@ engram_brief() {
   fi
 
   local decision_count
-  decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0;" 2>/dev/null || echo "0")
+  decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=1;" 2>/dev/null || echo "0")
+
+  local invalid_count
+  invalid_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=0;" 2>/dev/null || echo "0")
 
   local brief="# Decision Context ($decision_count decisions)"
 
   # ── Decisions: tag-grouped with excerpts, excluding superseded ──
   local distinct_tags
-  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
+  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.valid=1 AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
 
   if [ "$distinct_tags" -ge 3 ]; then
     # Tag-grouped decisions
     local tag_groups
-    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
+    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 AND valid=1 $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$tag_groups" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"
       while IFS='|' read -r tag entries; do
@@ -532,7 +627,7 @@ engram_brief() {
   else
     # Chronological decisions with excerpts
     local decisions
-    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END FROM signals WHERE type='decision' AND private=0 $superseded_in ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
+    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END FROM signals WHERE type='decision' AND private=0 AND valid=1 $superseded_in ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$decisions" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"$'\n'"$decisions"
     fi
@@ -548,6 +643,10 @@ engram_brief() {
   if [ "$superseded_count" -gt 0 ]; then
     [ -n "$footer_parts" ] && footer_parts="$footer_parts, "
     footer_parts="${footer_parts}$superseded_count superseded signal(s)"
+  fi
+  if [ "$invalid_count" -gt 0 ]; then
+    [ -n "$footer_parts" ] && footer_parts="$footer_parts, "
+    footer_parts="${footer_parts}$invalid_count signal(s) incomplete (missing rationale)"
   fi
   if [ -n "$footer_parts" ]; then
     brief="$brief"$'\n\n'"*+ $footer_parts not shown*"

@@ -597,11 +597,12 @@ test_brief() {
 ---
 type: decision
 date: 2026-03-14
+tags: [infrastructure]
 ---
 
 # Pick Redis for caching
 
-It's already in our stack.
+Already in our stack for session storage and pub/sub needs.
 EOF
 
   engram_reindex "$dir"
@@ -845,11 +846,12 @@ test_brief_excludes_private() {
 ---
 type: decision
 date: 2026-03-14
+tags: [architecture]
 ---
 
 # Public architecture choice
 
-Visible to everyone.
+Visible to everyone in the team and included in the brief.
 EOF
 
   # Write a private signal
@@ -857,11 +859,12 @@ EOF
 ---
 type: decision
 date: 2026-03-14
+tags: [business]
 ---
 
 # Private deal terms
 
-Confidential information.
+Confidential information about deal structure and terms.
 EOF
 
   engram_reindex "$dir"
@@ -1198,23 +1201,25 @@ test_brief_hides_superseded() {
 ---
 type: decision
 date: 2026-03-10
+tags: [infrastructure]
 ---
 
 # Use Memcached for caching
 
-Fast and simple.
+Fast and simple key-value store for basic caching needs.
 EOF
 
   cat > "$dir/signals/decision-new-cache.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
+tags: [infrastructure]
 supersedes: decision-old-cache
 ---
 
 # Use Redis for caching
 
-Supports pub/sub which we need for notifications.
+Supports pub/sub which we need for real-time notifications.
 EOF
 
   engram_reindex "$dir"
@@ -1244,7 +1249,7 @@ tags: [infrastructure, caching]
 
 # Use Redis
 
-For caching.
+Already in our stack for session storage and we need pub/sub.
 EOF
 
   cat > "$dir/signals/decision-jwt.md" << 'EOF'
@@ -1256,7 +1261,7 @@ tags: [auth, security]
 
 # Use JWT
 
-For authentication.
+Mobile clients need stateless token-based authentication.
 EOF
 
   cat > "$dir/signals/decision-postgres.md" << 'EOF'
@@ -1268,7 +1273,7 @@ tags: [database, storage]
 
 # Use PostgreSQL
 
-For persistence.
+Better JSON support and window functions than MySQL.
 EOF
 
   engram_reindex "$dir"
@@ -1292,12 +1297,12 @@ test_brief_max_lines() {
 ---
 type: decision
 date: 2026-03-14
-tags: [bulk]
+tags: [bulk, testing]
 ---
 
 # Bulk decision number $i
 
-Some explanation for decision $i with enough text to occupy space.
+Some explanation for decision $i with enough text to occupy space in the brief.
 EOF
   done
 
@@ -1326,11 +1331,12 @@ test_brief_excerpts() {
 ---
 type: decision
 date: 2026-03-14
+tags: [infrastructure]
 ---
 
 # Use Redis for caching
 
-Already in our stack for session storage.
+Already in our stack for session storage and pub/sub needs.
 EOF
 
   engram_reindex "$dir"
@@ -1727,11 +1733,12 @@ test_pre_compact_output() {
 ---
 type: decision
 date: 2026-03-14
+tags: [testing]
 ---
 
 # Compact test decision
 
-Testing pre-compact hook.
+Testing pre-compact hook with valid signal to verify context injection.
 EOF
 
   engram_reindex "$dir"
@@ -1888,6 +1895,225 @@ test_hooks_json_prompts() {
   assert_not_contains "PreCompact never blocks" "$compact_prompt" '"ok": false'
 }
 
+# ── Validation tests ─────────────────────────────────────────────────
+
+test_validate_signal_valid() {
+  echo "test_validate_signal_valid:"
+  local dir="$TEST_DIR/test-validate-valid/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-valid-test.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [architecture, validation]
+---
+
+# Use strict validation for signals
+
+Enforce structure at write time to ensure all decisions include rationale, improving brief quality.
+
+## Alternatives
+- No validation — too many incomplete signals
+EOF
+
+  local rc=0
+  _validate_signal "$dir/signals/decision-valid-test.md" 2>/dev/null || rc=$?
+  assert_eq "valid signal passes" "$rc" "0"
+}
+
+test_validate_signal_missing_why() {
+  echo "test_validate_signal_missing_why:"
+  local dir="$TEST_DIR/test-validate-no-why/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-no-why.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [test]
+---
+
+# Decision without explanation
+
+EOF
+
+  local rc=0
+  _validate_signal "$dir/signals/decision-no-why.md" 2>/dev/null || rc=$?
+  assert_eq "missing lead paragraph fails" "$rc" "1"
+}
+
+test_validate_signal_missing_tags() {
+  echo "test_validate_signal_missing_tags:"
+  local dir="$TEST_DIR/test-validate-no-tags/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-no-tags.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: []
+---
+
+# Decision without tags
+
+This decision has no tags which should fail validation checks.
+EOF
+
+  local rc=0
+  _validate_signal "$dir/signals/decision-no-tags.md" 2>/dev/null || rc=$?
+  assert_eq "empty tags fails" "$rc" "1"
+}
+
+test_validate_signal_short_why() {
+  echo "test_validate_signal_short_why:"
+  local dir="$TEST_DIR/test-validate-short/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-short-why.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [test]
+---
+
+# Short explanation
+
+Too short.
+EOF
+
+  local rc=0
+  _validate_signal "$dir/signals/decision-short-why.md" 2>/dev/null || rc=$?
+  assert_eq "short lead paragraph fails" "$rc" "1"
+}
+
+test_reindex_marks_invalid() {
+  echo "test_reindex_marks_invalid:"
+  local dir="$TEST_DIR/test-reindex-valid/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Valid signal
+  cat > "$dir/signals/decision-good.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [validation]
+---
+
+# A good decision with rationale
+
+This decision includes a proper lead paragraph explaining why it was made.
+EOF
+
+  # Invalid signal (no tags, no lead paragraph)
+  cat > "$dir/signals/decision-bad.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+---
+
+# Bad decision
+
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  local valid_good
+  valid_good=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='decision-good';")
+  assert_eq "good signal is valid=1" "$valid_good" "1"
+
+  local valid_bad
+  valid_bad=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='decision-bad';")
+  assert_eq "bad signal is valid=0" "$valid_bad" "0"
+}
+
+test_brief_excludes_invalid() {
+  echo "test_brief_excludes_invalid:"
+  local dir="$TEST_DIR/test-brief-invalid/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Valid signal
+  cat > "$dir/signals/decision-visible.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [validation]
+---
+
+# Visible decision in brief
+
+This decision has proper rationale and should appear in the brief output.
+EOF
+
+  # Invalid signal (missing tags and short body)
+  cat > "$dir/signals/decision-hidden.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+---
+
+# Hidden from brief
+
+Short.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+  engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_contains "brief shows valid signal" "$brief" "Visible decision"
+  assert_not_contains "brief hides invalid signal" "$brief" "Hidden from brief"
+  assert_contains "brief shows incomplete count" "$brief" "incomplete (missing rationale)"
+}
+
+test_ingest_bodyless_commit_invalid() {
+  echo "test_ingest_bodyless_commit_invalid:"
+  local repo_dir="$TEST_DIR/test-ingest-bodyless-repo"
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  # Commit with no body (just subject line)
+  echo "v1" > feature.rb
+  git add feature.rb
+  git commit -q -m "feat: add feature without body"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+  engram_ingest_commits "$dir"
+  engram_reindex "$dir" 2>/dev/null
+
+  # Auto-ingested commit without body should be invalid (no tags, short/missing lead paragraph)
+  local valid_val
+  valid_val=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE source LIKE 'git:%' LIMIT 1;" 2>/dev/null || echo "")
+  assert_eq "bodyless commit is valid=0" "$valid_val" "0"
+
+  # Should be excluded from brief
+  engram_brief "$dir"
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_not_contains "brief excludes bodyless commit" "$brief" "add feature without body"
+
+  cd "$SCRIPT_DIR"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -1988,6 +2214,20 @@ echo ""
 test_hooks_json_prompts
 echo ""
 test_brief_max_lines
+echo ""
+test_validate_signal_valid
+echo ""
+test_validate_signal_missing_why
+echo ""
+test_validate_signal_missing_tags
+echo ""
+test_validate_signal_short_why
+echo ""
+test_reindex_marks_invalid
+echo ""
+test_brief_excludes_invalid
+echo ""
+test_ingest_bodyless_commit_invalid
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
