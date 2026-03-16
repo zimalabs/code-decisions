@@ -221,6 +221,70 @@ Parallelized integration tests across 4 workers.
 
 Issues with `status: resolved` or that have been superseded are counted but hidden from the brief.
 
+## Querying
+
+Ask questions in natural language — Claude converts them to SQL automatically.
+
+### Natural language
+
+```
+@engram:query what decisions have we made about authentication?
+@engram:query any open issues?
+@engram:query what did we decide about caching last week?
+```
+
+### Full-text search
+
+Search across all signal types by keyword:
+
+```
+@engram:query anything mentioning Redis?
+```
+
+Behind the scenes:
+
+```sql
+SELECT s.type, s.title, s.date FROM signals_fts fts
+JOIN signals s ON s.id = fts.rowid
+WHERE signals_fts MATCH 'Redis' ORDER BY rank
+```
+
+### Decision history
+
+Walk the supersession chain to see how a decision evolved:
+
+```
+@engram:query what did decision-use-jwt replace?
+@engram:query show me the full auth decision chain
+```
+
+Example chain: `decision-use-sessions` → `decision-use-jwt` → `decision-use-oauth2`
+
+### Relationship traversal
+
+Follow links between signals:
+
+```
+@engram:query what's related to the Redis decision?
+@engram:query what's blocking issue-notification-delay?
+```
+
+### Issue tracking
+
+```
+@engram:query show open issues
+@engram:query how many issues have been resolved?
+```
+
+### Direct SQL
+
+Power users can pass raw SQL queries:
+
+```
+@engram:query SELECT type, COUNT(*) as count FROM signals GROUP BY type
+@engram:query SELECT title, date FROM signals WHERE date >= '2026-03-01' ORDER BY date DESC
+```
+
 ## In a PR
 
 ```diff
