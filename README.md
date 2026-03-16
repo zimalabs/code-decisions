@@ -19,7 +19,7 @@ That's it. No `engram init`. No configuration.
 For development or dogfooding from a local clone:
 
 ```sh
-claude plugin marketplace add . --scope project
+claude plugin marketplace add ./. --scope project
 claude plugin install engram@zimalabs --scope project
 ```
 
@@ -220,7 +220,6 @@ Power users can pass raw SQL queries:
 |---|---|
 | `@engram:capture` | Guided signal creation — reads schema, validates frontmatter, writes the file |
 | `@engram:query` | Query past decisions in natural language or raw SQL (see [Querying](#querying)) |
-| `@engram:visualize` | Generate an interactive HTML dashboard — timeline, charts, link graph, searchable table |
 | `@engram:brief` | Regenerate and display the brief on demand — see updated context without restarting the session |
 | `@engram:reindex` | Rebuild `index.db` on demand after manual signal edits (no need to wait for next session) |
 | `@engram:introspect` | Interactive gap-filling loop — adds missing tags, links, and body sections to existing decisions |
@@ -231,12 +230,15 @@ Engram hooks run automatically — no configuration needed. Here's what happens 
 
 | Hook | Event | Behavior |
 |---|---|---|
-| **Stop enforcement** | Session end | Blocks if significant code changes lack a decision signal |
+| **Session lifecycle** | SessionStart / SessionEnd | Ingest commits + plans, rebuild index, generate brief, inject context |
+| **Stop enforcement** | Stop | Blocks if significant code changes lack a decision signal |
 | **PostToolUse nudge** | After Write/Edit | Advisory "consider recording this decision" (once per session) |
 | **Context injection** | After Write/Edit | Auto-injects related past decisions when editing code files |
 | **Signal validation** | Before Write/Edit | Validates frontmatter format on writes to `.engram/decisions/` |
-| **Decision detection** | User prompt | Detects decision language ("let's go with…") and suggests capture |
-| **Compaction safety** | Before compaction | Warns about unrecorded decisions before context is compacted |
+| **Subagent review** | SubagentStop | Suggests capture when subagents make architectural recommendations |
+| **Decision detection** | UserPromptSubmit | Detects decision language ("let's go with…") and suggests capture |
+| **Compaction safety** | PreCompact | Warns about unrecorded decisions before context is compacted |
+| **Enrichment nudge** | Notification | Suggests `@engram:introspect` when signals have missing sections |
 
 All hooks are advisory or self-correcting — they guide the agent without interrupting your workflow.
 
