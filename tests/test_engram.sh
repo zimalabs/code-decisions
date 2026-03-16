@@ -841,6 +841,122 @@ test_fts5_check() {
   assert_eq "_check_fts5 succeeds" "$rc" "0"
 }
 
+test_uncommitted_summary() {
+  echo "test_uncommitted_summary:"
+  local repo_dir="$TEST_DIR/test-uncommitted-repo"
+  _create_test_repo "$repo_dir" 1
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+
+  # Write an uncommitted signal file
+  cat > "$dir/decisions/2026-03-16-test-uncommitted.md" << 'EOF'
+---
+date: 2026-03-16
+---
+
+# Test uncommitted signal
+
+Some content.
+EOF
+
+  # Should report 1 uncommitted signal
+  local result
+  result=$(cd "$repo_dir" && engram_uncommitted_summary "$dir")
+  assert_contains "reports uncommitted count" "$result" "1 uncommitted signal"
+
+  # Commit the signal file
+  cd "$repo_dir"
+  git add .engram/
+  git commit -q -m "engram: add signal"
+
+  # Should report nothing after commit
+  result=$(engram_uncommitted_summary "$dir")
+  assert_eq "no output after commit" "$result" ""
+
+  cd "$SCRIPT_DIR"
+}
+
+test_uncommitted_summary_no_git() {
+  echo "test_uncommitted_summary_no_git:"
+  local dir="$TEST_DIR/test-uncommitted-nogit/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Write a signal file (not in a git repo)
+  cat > "$dir/decisions/2026-03-16-no-git.md" << 'EOF'
+---
+date: 2026-03-16
+---
+
+# No git repo
+
+Content.
+EOF
+
+  # Should return nothing (no git repo)
+  local result
+  result=$(engram_uncommitted_summary "$dir")
+  assert_eq "no output outside git" "$result" ""
+}
+
+test_session_end_output() {
+  echo "test_session_end_output:"
+  local repo_dir="$TEST_DIR/test-session-end-repo"
+
+  # Create a repo with only non-decision commits (docs/fix prefixes are skipped)
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+  echo "readme" > README.md
+  git add . && git commit -q -m "docs: add readme"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+  # Ingest + commit .engram so it's clean
+  engram_ingest_commits "$dir"
+  engram_reindex "$dir"
+  engram_brief "$dir"
+  # Add .gitkeep to empty dirs so git tracks them
+  touch "$dir/decisions/.gitkeep" "$dir/findings/.gitkeep" "$dir/issues/.gitkeep"
+  git add .engram/ && git commit -q -m "engram: init"
+
+  # Run session-end hook with CLAUDE_PLUGIN_ROOT set
+  local hook_script="$SCRIPT_DIR/../hooks/session-end.sh"
+
+  # Test 1: no uncommitted signals — should nudge to capture
+  local output
+  # Use an empty plans dir to avoid picking up plans from other tests
+  local empty_plans="$TEST_DIR/empty-plans-for-session-end"
+  mkdir -p "$empty_plans"
+  output=$(cd "$repo_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." ENGRAM_PLANS_DIR="$empty_plans" bash "$hook_script" 2>/dev/null)
+  assert_contains "nudge when no signals" "$output" "No new signals were captured"
+  assert_contains "valid JSON output" "$output" "hookSpecificOutput"
+  assert_contains "SessionEnd event" "$output" "SessionEnd"
+
+  # Test 2: with uncommitted signal — should remind to commit
+  cat > "$dir/decisions/2026-03-16-test-end.md" << 'EOF'
+---
+date: 2026-03-16
+---
+
+# Test session end
+
+Content.
+EOF
+
+  output=$(cd "$repo_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." ENGRAM_PLANS_DIR="$empty_plans" bash "$hook_script" 2>/dev/null)
+  assert_contains "remind when uncommitted" "$output" "uncommitted signal"
+  assert_contains "commit instruction" "$output" "git add .engram/"
+
+  cd "$SCRIPT_DIR"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -891,6 +1007,12 @@ echo ""
 test_private_queryable
 echo ""
 test_public_signals_unchanged
+echo ""
+test_uncommitted_summary
+echo ""
+test_uncommitted_summary_no_git
+echo ""
+test_session_end_output
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

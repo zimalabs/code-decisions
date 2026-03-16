@@ -433,3 +433,18 @@ engram_brief() {
 
   printf '%s\n' "$brief" > "$dir/brief.md"
 }
+
+# ── Uncommitted signal summary ─────────────────────────────────────
+
+engram_uncommitted_summary() {
+  local dir="$1"
+  git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
+
+  local uncommitted
+  uncommitted=$(git status --porcelain "$dir/decisions" "$dir/findings" "$dir/issues" 2>/dev/null | grep -v '^$')
+  [ -z "$uncommitted" ] && return 0
+
+  local count
+  count=$(echo "$uncommitted" | wc -l | tr -d ' ')
+  echo "$count uncommitted signal(s) in .engram/"
+}

@@ -31,6 +31,10 @@ total=$((decisions + findings + issues))
   echo ""
   echo "  ◆ engram active"
   echo "  ├─ $decisions decisions · $findings findings · $issues issues"
+  uncommitted_msg=$(engram_uncommitted_summary "$ENGRAM_DIR")
+  if [ -n "$uncommitted_msg" ]; then
+    echo "  ├─ $uncommitted_msg"
+  fi
   if [ "$private" -gt 0 ]; then
     echo "  ├─ $private private signals"
   fi
@@ -46,20 +50,35 @@ instructions="$brief
 
 ---
 You have a persistent decision store via engram (.engram/ directory).
-When you make a significant decision, write a signal file:
-  Write .engram/decisions/{date}-{slug}.md  (use the decision schema)
-When you discover something important:
-  Write .engram/findings/{date}-{slug}.md   (use the finding schema)
-When you identify an issue:
-  Write .engram/issues/{date}-{slug}.md     (use the issue schema)
 
-For PRIVATE signals (sensitive, never git-tracked or auto-sent to API):
-  Write .engram/private/decisions/{date}-{slug}.md
-  Write .engram/private/findings/{date}-{slug}.md
-  Write .engram/private/issues/{date}-{slug}.md
+IMPORTANT: You MUST capture signals during this session. After completing
+any of these actions, immediately write a signal file:
+
+  Decision signals (.engram/decisions/{date}-{slug}.md):
+  - Chose one approach over alternatives
+  - Added, removed, or changed a dependency
+  - Changed architecture, schema, or API design
+  - Set up CI, deployment, or infrastructure
+
+  Finding signals (.engram/findings/{date}-{slug}.md):
+  - Discovered a bug, limitation, or undocumented behavior
+  - Found that a library/tool works differently than expected
+  - Identified a performance bottleneck or security concern
+
+  Issue signals (.engram/issues/{date}-{slug}.md):
+  - Found something broken that wasn't fixed this session
+  - Identified tech debt or a missing test
+  - Noted a blocker for future work
+
+For PRIVATE signals (sensitive, never git-tracked):
+  Use .engram/private/{decisions,findings,issues}/ instead
 
 To query past signals:
-  @engram:query <question>"
+  @engram:query <question>
+
+Signal files are git-tracked. Before ending your session, if you created
+any signals, stage and commit them:
+  git add .engram/ && git commit -m \"engram: update signals\""
 
 # JSON-escape and output
 json_ctx=$(printf '%s' "$instructions" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }')
