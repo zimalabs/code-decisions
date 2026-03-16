@@ -25,12 +25,12 @@ _check_fts5() {
 engram_init() {
   local dir="$1"
   _check_fts5
-  mkdir -p "$dir"/{decisions,findings,issues}
-  mkdir -p "$dir"/private/{decisions,findings,issues}
+  mkdir -p "$dir"/signals
+  mkdir -p "$dir"/_private
   if [ ! -f "$dir/.gitignore" ]; then
-    printf 'index.db\nprivate/\n' > "$dir/.gitignore"
-  elif ! grep -qx 'private/' "$dir/.gitignore"; then
-    echo 'private/' >> "$dir/.gitignore"
+    printf 'index.db\n_private/\n' > "$dir/.gitignore"
+  elif ! grep -qx '_private/' "$dir/.gitignore"; then
+    echo '_private/' >> "$dir/.gitignore"
   fi
   if [ ! -f "$dir/index.db" ]; then
     sqlite3 "$dir/index.db" < "$ENGRAM_SCHEMA_FILE"
@@ -140,7 +140,7 @@ engram_ingest_commits() {
     fi
 
     # Dedup: skip if file with this source already exists
-    if grep -rql "source: git:$hash" "$dir/decisions/" 2>/dev/null; then
+    if grep -rql "source: git:$hash" "$dir/signals/" 2>/dev/null; then
       continue
     fi
 
@@ -150,11 +150,11 @@ engram_ingest_commits() {
     slug=$(_slugify "$subject")
     [ -z "$slug" ] && slug="commit-${hash:0:7}"
 
-    local filepath="$dir/decisions/${date}-${slug}.md"
+    local filepath="$dir/signals/decision-${slug}.md"
 
     # Avoid filename collisions
     if [ -f "$filepath" ]; then
-      filepath="$dir/decisions/${date}-${slug}-${hash:0:7}.md"
+      filepath="$dir/signals/decision-${slug}-${hash:0:7}.md"
     fi
 
     local stat
@@ -167,6 +167,7 @@ engram_ingest_commits() {
     if [ -n "$body" ]; then
       cat > "$filepath" << SIGNAL
 ---
+type: decision
 date: $date
 source: git:$hash
 ---
@@ -180,6 +181,7 @@ SIGNAL
     else
       cat > "$filepath" << SIGNAL
 ---
+type: decision
 date: $date
 source: git:$hash
 ---
@@ -257,7 +259,7 @@ engram_ingest_plans() {
     basename=$(basename "$plan_file" .md)
 
     # Dedup: skip if file with this source already exists
-    if [ -n "$(find "$dir/decisions" -name '*.md' 2>/dev/null)" ] && grep -rql "source: plan:$basename" "$dir/decisions/" 2>/dev/null; then
+    if [ -n "$(find "$dir/signals" -name '*.md' 2>/dev/null)" ] && grep -rql "source: plan:$basename" "$dir/signals/" 2>/dev/null; then
       continue
     fi
 
@@ -277,10 +279,11 @@ engram_ingest_plans() {
     slug=$(_slugify "$title")
     [ -z "$slug" ] && slug="plan-$basename"
 
-    local filepath="$dir/decisions/${today}-plan-${slug}.md"
+    local filepath="$dir/signals/decision-plan-${slug}.md"
 
     cat > "$filepath" << SIGNAL
 ---
+type: decision
 date: $today
 source: plan:$basename
 ---
@@ -320,46 +323,27 @@ engram_reindex() {
     done <<< "$meta_backup"
   fi
 
-  # Index all public signal files
-  for type_dir in decisions findings issues; do
-    local type_name
-    case "$type_dir" in
-      decisions) type_name="decision" ;;
-      findings)  type_name="finding" ;;
-      issues)    type_name="issue" ;;
-    esac
-
-    for f in "$dir/$type_dir"/*.md; do
-      [ -f "$f" ] || continue
-      _index_file "$dir" "$f" "$type_name" 0
-    done
+  # Index public signals
+  for f in "$dir/signals"/*.md; do
+    [ -f "$f" ] || continue
+    _index_file "$dir" "$f" 0
   done
 
-  # Index all private signal files
-  for type_dir in decisions findings issues; do
-    local type_name
-    case "$type_dir" in
-      decisions) type_name="decision" ;;
-      findings)  type_name="finding" ;;
-      issues)    type_name="issue" ;;
-    esac
-
-    for f in "$dir/private/$type_dir"/*.md; do
-      [ -f "$f" ] || continue
-      _index_file "$dir" "$f" "$type_name" 1
-    done
+  # Index private signals
+  for f in "$dir/_private"/*.md; do
+    [ -f "$f" ] || continue
+    _index_file "$dir" "$f" 1
   done
 }
 
 _index_file() {
   local dir="$1"
   local filepath="$2"
-  local type="$3"
-  local private="${4:-0}"
+  local private="${3:-0}"
 
   # Parse frontmatter
   local in_frontmatter=0
-  local fm_date="" fm_tags="[]" fm_source=""
+  local fm_type="" fm_date="" fm_tags="[]" fm_source=""
   local body=""
   local title=""
   local past_frontmatter=0
@@ -377,6 +361,7 @@ _index_file() {
       fi
       if [ "$in_frontmatter" -eq 1 ]; then
         case "$line" in
+          type:*)   fm_type="${line#type:}"; fm_type="${fm_type# }";;
           date:*)   fm_date="${line#date:}"; fm_date="${fm_date# }";;
           source:*) fm_source="${line#source:}"; fm_source="${fm_source# }";;
           tags:*)   fm_tags="${line#tags:}"; fm_tags="${fm_tags# }";;
@@ -396,6 +381,19 @@ _index_file() {
 
   [ -z "$fm_date" ] && fm_date=$(date +%Y-%m-%d)
   [ -z "$title" ] && title=$(basename "$filepath" .md)
+
+  # Derive type: frontmatter > filename prefix > default
+  local type="$fm_type"
+  if [ -z "$type" ]; then
+    local fname
+    fname=$(basename "$filepath")
+    case "$fname" in
+      decision-*) type="decision" ;;
+      finding-*)  type="finding" ;;
+      issue-*)    type="issue" ;;
+      *)          type="decision" ;;
+    esac
+  fi
 
   # Combine title + body as content
   local content="$title"$'\n'"$body"
@@ -460,7 +458,7 @@ engram_uncommitted_summary() {
   git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
 
   local uncommitted
-  uncommitted=$(git status --porcelain "$dir/decisions" "$dir/findings" "$dir/issues" 2>/dev/null | grep -v '^$')
+  uncommitted=$(git status --porcelain "$dir/signals" "$dir/_private" 2>/dev/null | grep -v '^$')
   [ -z "$uncommitted" ] && return 0
 
   local count

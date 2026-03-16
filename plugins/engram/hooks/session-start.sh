@@ -50,35 +50,20 @@ instructions="$brief
 
 ---
 You have a persistent decision store via engram (.engram/ directory).
+When you make a significant decision, write a signal file:
+  Write .engram/signals/decision-{slug}.md  (use the decision schema)
+When you discover something important:
+  Write .engram/signals/finding-{slug}.md   (use the finding schema)
+When you identify an issue:
+  Write .engram/signals/issue-{slug}.md     (use the issue schema)
 
-IMPORTANT: You MUST capture signals during this session. After completing
-any of these actions, immediately write a signal file:
-
-  Decision signals (.engram/decisions/{date}-{slug}.md):
-  - Chose one approach over alternatives
-  - Added, removed, or changed a dependency
-  - Changed architecture, schema, or API design
-  - Set up CI, deployment, or infrastructure
-
-  Finding signals (.engram/findings/{date}-{slug}.md):
-  - Discovered a bug, limitation, or undocumented behavior
-  - Found that a library/tool works differently than expected
-  - Identified a performance bottleneck or security concern
-
-  Issue signals (.engram/issues/{date}-{slug}.md):
-  - Found something broken that wasn't fixed this session
-  - Identified tech debt or a missing test
-  - Noted a blocker for future work
-
-For PRIVATE signals (sensitive, never git-tracked):
-  Use .engram/private/{decisions,findings,issues}/ instead
+For PRIVATE signals (sensitive, never git-tracked or auto-sent to API):
+  Write .engram/_private/decision-{slug}.md
+  Write .engram/_private/finding-{slug}.md
+  Write .engram/_private/issue-{slug}.md
 
 To query past signals:
-  @engram:query <question>
-
-Signal files are git-tracked. Before ending your session, if you created
-any signals, stage and commit them:
-  git add .engram/ && git commit -m \"engram: update signals\""
+  @engram:query <question>"
 
 # JSON-escape and output
 json_ctx=$(printf '%s' "$instructions" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }')

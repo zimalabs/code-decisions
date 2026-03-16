@@ -144,9 +144,8 @@ test_init() {
   source "$LIB"
   engram_init "$dir"
 
-  assert_dir_exists "decisions dir" "$dir/decisions"
-  assert_dir_exists "findings dir" "$dir/findings"
-  assert_dir_exists "issues dir" "$dir/issues"
+  assert_dir_exists "signals dir" "$dir/signals"
+  assert_dir_exists "_private dir" "$dir/_private"
   assert_file_exists "gitignore" "$dir/.gitignore"
   assert_file_exists "index.db" "$dir/index.db"
 
@@ -154,7 +153,7 @@ test_init() {
   local gitignore
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore contains index.db" "$gitignore" "index.db"
-  assert_contains "gitignore contains private/" "$gitignore" "private/"
+  assert_contains "gitignore contains _private/" "$gitignore" "_private/"
 
   # Idempotent: run again, no error
   engram_init "$dir"
@@ -168,9 +167,7 @@ test_init_private_dirs() {
   source "$LIB"
   engram_init "$dir"
 
-  assert_dir_exists "private/decisions dir" "$dir/private/decisions"
-  assert_dir_exists "private/findings dir" "$dir/private/findings"
-  assert_dir_exists "private/issues dir" "$dir/private/issues"
+  assert_dir_exists "_private dir" "$dir/_private"
 }
 
 test_init_upgrade_gitignore() {
@@ -178,7 +175,7 @@ test_init_upgrade_gitignore() {
   local dir="$TEST_DIR/test-upgrade-gitignore/.engram"
 
   mkdir -p "$dir"
-  # Create old-style .gitignore without private/
+  # Create old-style .gitignore without _private/
   echo "index.db" > "$dir/.gitignore"
 
   source "$LIB"
@@ -187,7 +184,7 @@ test_init_upgrade_gitignore() {
   local gitignore
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore has index.db" "$gitignore" "index.db"
-  assert_contains "gitignore has private/" "$gitignore" "private/"
+  assert_contains "gitignore has _private/" "$gitignore" "_private/"
 }
 
 test_write_decision() {
@@ -198,7 +195,7 @@ test_write_decision() {
   engram_init "$dir"
 
   # Write a decision signal file
-  cat > "$dir/decisions/2026-03-14-use-redis.md" << 'EOF'
+  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
 ---
 date: 2026-03-14
 tags: [infrastructure, caching]
@@ -234,7 +231,7 @@ test_write_finding() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/findings/2026-03-11-fts5-sync.md" << 'EOF'
+  cat > "$dir/signals/finding-fts5-sync.md" << 'EOF'
 ---
 date: 2026-03-11
 tags: [sqlite, search]
@@ -267,7 +264,7 @@ test_write_issue() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/issues/2026-03-11-ci-slow.md" << 'EOF'
+  cat > "$dir/signals/issue-ci-slow.md" << 'EOF'
 ---
 date: 2026-03-11
 tags: [ci, testing]
@@ -339,12 +336,12 @@ test_ingest_commits() {
 
   # Should have 3 decision files (feat, refactor, migrate) out of 7 commits
   local file_count
-  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "3 decisions from 7 commits" "$file_count" "3"
 
   # Verify files have source: git:<hash>
   local has_source
-  has_source=$(grep -rl "source: git:" "$dir/decisions/" | wc -l | tr -d ' ')
+  has_source=$(grep -rl "source: git:" "$dir/signals/" | wc -l | tr -d ' ')
   assert_eq "all have git source" "$has_source" "3"
 
   cd "$SCRIPT_DIR"
@@ -377,12 +374,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
   # Should have 2 decision files
   local file_count
-  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "2 decisions created" "$file_count" "2"
 
   # Verify body appears in the OAuth2 signal file
   local oauth_file
-  oauth_file=$(grep -rl "OAuth2" "$dir/decisions/" | head -1)
+  oauth_file=$(grep -rl "OAuth2" "$dir/signals/" | head -1)
   local content
   content=$(cat "$oauth_file")
   assert_contains "body included in signal" "$content" "token-based auth"
@@ -390,7 +387,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
   # Verify the no-body commit doesn't have extra blank lines between title and stat
   local api_file
-  api_file=$(grep -rl "API gateway" "$dir/decisions/" | head -1)
+  api_file=$(grep -rl "API gateway" "$dir/signals/" | head -1)
   local api_content
   api_content=$(cat "$api_file")
   assert_contains "no-body signal has stat" "$api_content" "api.rb"
@@ -411,11 +408,11 @@ test_ingest_dedup() {
   # Ingest twice
   engram_ingest_commits "$dir"
   local first_count
-  first_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  first_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
 
   engram_ingest_commits "$dir"
   local second_count
-  second_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  second_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
 
   assert_eq "no duplicates after second ingest" "$first_count" "$second_count"
 
@@ -450,7 +447,7 @@ test_ingest_brownfield() {
 
   # Brownfield scans last 50 commits. Of those 50, 40 are feat (decision) and 10 are fix (skip).
   local file_count
-  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  file_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "brownfield: only decisions from last 50" "$file_count" "40"
 
   cd "$SCRIPT_DIR"
@@ -483,12 +480,12 @@ EOF
 
   # Should have created a decision file from the plan
   local plan_files
-  plan_files=$(grep -rl "source: plan:auth-redesign" "$dir/decisions/" 2>/dev/null | wc -l | tr -d ' ')
+  plan_files=$(grep -rl "source: plan:auth-redesign" "$dir/signals/" 2>/dev/null | wc -l | tr -d ' ')
   assert_eq "plan ingested" "$plan_files" "1"
 
   # Verify content includes the context section
   local content
-  content=$(cat "$dir/decisions"/*plan*auth*.md 2>/dev/null || echo "")
+  content=$(cat "$dir/signals"/decision-plan*auth*.md 2>/dev/null || echo "")
   assert_contains "plan has context content" "$content" "JWT"
 
   cd "$SCRIPT_DIR"
@@ -502,8 +499,9 @@ test_reindex() {
   engram_init "$dir"
 
   # Write some signal files
-  cat > "$dir/decisions/2026-03-14-test-a.md" << 'EOF'
+  cat > "$dir/signals/decision-test-a.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -512,8 +510,9 @@ date: 2026-03-14
 Content A
 EOF
 
-  cat > "$dir/findings/2026-03-14-test-b.md" << 'EOF'
+  cat > "$dir/signals/finding-test-b.md" << 'EOF'
 ---
+type: finding
 date: 2026-03-14
 ---
 
@@ -544,8 +543,9 @@ test_brief() {
   engram_init "$dir"
 
   # Write signals
-  cat > "$dir/decisions/2026-03-14-pick-redis.md" << 'EOF'
+  cat > "$dir/signals/decision-pick-redis.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -554,8 +554,9 @@ date: 2026-03-14
 It's already in our stack.
 EOF
 
-  cat > "$dir/issues/2026-03-14-ci-slow.md" << 'EOF'
+  cat > "$dir/signals/issue-ci-slow.md" << 'EOF'
 ---
+type: issue
 date: 2026-03-14
 ---
 
@@ -585,8 +586,9 @@ test_fts_search() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/decisions/2026-03-14-postgresql.md" << 'EOF'
+  cat > "$dir/signals/decision-postgresql.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -595,8 +597,9 @@ date: 2026-03-14
 Better JSON support and window functions.
 EOF
 
-  cat > "$dir/findings/2026-03-14-fts5.md" << 'EOF'
+  cat > "$dir/signals/finding-fts5.md" << 'EOF'
 ---
+type: finding
 date: 2026-03-14
 ---
 
@@ -629,15 +632,16 @@ test_frontmatter_parsing() {
   engram_init "$dir"
 
   # File with no frontmatter at all
-  cat > "$dir/decisions/2026-03-14-no-frontmatter.md" << 'EOF'
+  cat > "$dir/signals/decision-no-frontmatter.md" << 'EOF'
 # Decision with no frontmatter
 
 Just a plain markdown file with a heading.
 EOF
 
   # File with partial frontmatter (missing tags)
-  cat > "$dir/decisions/2026-03-14-partial.md" << 'EOF'
+  cat > "$dir/signals/decision-partial.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -647,8 +651,9 @@ Only date, no tags or source.
 EOF
 
   # File with full frontmatter
-  cat > "$dir/decisions/2026-03-14-full.md" << 'EOF'
+  cat > "$dir/signals/decision-full.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 tags: [api, auth]
 source: git:abc1234
@@ -722,7 +727,7 @@ test_incremental_ingest() {
   engram_ingest_commits "$dir"
 
   local first_count
-  first_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  first_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "3 initial commits" "$first_count" "3"
 
   # Add 2 more decision-worthy commits
@@ -734,7 +739,7 @@ test_incremental_ingest() {
   engram_ingest_commits "$dir"
 
   local second_count
-  second_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  second_count=$(find "$dir/signals" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "5 after incremental" "$second_count" "5"
 
   cd "$SCRIPT_DIR"
@@ -747,8 +752,9 @@ test_file_column() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/decisions/2026-03-14-test-file.md" << 'EOF'
+  cat > "$dir/signals/decision-test-file.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -761,7 +767,7 @@ EOF
 
   local file_val
   file_val=$(sqlite3 "$dir/index.db" "SELECT file FROM signals LIMIT 1;")
-  assert_contains "file column has path" "$file_val" "decisions/2026-03-14-test-file.md"
+  assert_contains "file column has path" "$file_val" "signals/decision-test-file.md"
 }
 
 test_private_signal_indexed() {
@@ -771,8 +777,9 @@ test_private_signal_indexed() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/private/decisions/2026-03-14-secret-deal.md" << 'EOF'
+  cat > "$dir/_private/decision-secret-deal.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 tags: [crm, deals]
 ---
@@ -797,8 +804,9 @@ test_brief_excludes_private() {
   engram_init "$dir"
 
   # Write a public signal
-  cat > "$dir/decisions/2026-03-14-public-choice.md" << 'EOF'
+  cat > "$dir/signals/decision-public-choice.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -808,8 +816,9 @@ Visible to everyone.
 EOF
 
   # Write a private signal
-  cat > "$dir/private/decisions/2026-03-14-private-deal.md" << 'EOF'
+  cat > "$dir/_private/decision-private-deal.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -835,8 +844,9 @@ test_private_queryable() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/private/findings/2026-03-14-competitor-intel.md" << 'EOF'
+  cat > "$dir/_private/finding-competitor-intel.md" << 'EOF'
 ---
+type: finding
 date: 2026-03-14
 tags: [competitive]
 ---
@@ -861,8 +871,9 @@ test_public_signals_unchanged() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/decisions/2026-03-14-normal-decision.md" << 'EOF'
+  cat > "$dir/signals/decision-normal.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-14
 ---
 
@@ -899,8 +910,9 @@ test_uncommitted_summary() {
   engram_init "$dir"
 
   # Write an uncommitted signal file
-  cat > "$dir/decisions/2026-03-16-test-uncommitted.md" << 'EOF'
+  cat > "$dir/signals/decision-test-uncommitted.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-16
 ---
 
@@ -934,8 +946,9 @@ test_uncommitted_summary_no_git() {
   engram_init "$dir"
 
   # Write a signal file (not in a git repo)
-  cat > "$dir/decisions/2026-03-16-no-git.md" << 'EOF'
+  cat > "$dir/signals/decision-no-git.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-16
 ---
 
@@ -971,7 +984,7 @@ test_session_end_output() {
   engram_reindex "$dir"
   engram_brief "$dir"
   # Add .gitkeep to empty dirs so git tracks them
-  touch "$dir/decisions/.gitkeep" "$dir/findings/.gitkeep" "$dir/issues/.gitkeep"
+  touch "$dir/signals/.gitkeep" "$dir/_private/.gitkeep"
   git add .engram/ && git commit -q -m "engram: init"
 
   # Run session-end hook with CLAUDE_PLUGIN_ROOT set
@@ -988,8 +1001,9 @@ test_session_end_output() {
   assert_contains "SessionEnd event" "$output" "SessionEnd"
 
   # Test 2: with uncommitted signal — should remind to commit
-  cat > "$dir/decisions/2026-03-16-test-end.md" << 'EOF'
+  cat > "$dir/signals/decision-test-end.md" << 'EOF'
 ---
+type: decision
 date: 2026-03-16
 ---
 

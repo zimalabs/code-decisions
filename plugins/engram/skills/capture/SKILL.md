@@ -10,7 +10,7 @@ Write a signal file directly to the `.engram/` directory using the Write tool.
 ## Signal Types
 
 ### Decision — Why we chose X
-Directory: `.engram/decisions/`
+File: `.engram/signals/decision-{slug}.md`
 
 ```markdown
 ---
@@ -34,7 +34,7 @@ What we gave up or risk by choosing this.
 ```
 
 ### Finding — Why we now know X
-Directory: `.engram/findings/`
+File: `.engram/signals/finding-{slug}.md`
 
 ```markdown
 ---
@@ -54,7 +54,7 @@ What this means for the project going forward.
 ```
 
 ### Issue — Why X needs attention
-Directory: `.engram/issues/`
+File: `.engram/signals/issue-{slug}.md`
 
 ```markdown
 ---
@@ -77,9 +77,9 @@ What should be done about it.
 
 Signals have two visibility tiers based on directory path:
 
-- **Public** (default): `.engram/decisions/`, `.engram/findings/`, `.engram/issues/`
+- **Public** (default): `.engram/signals/`
   - Git-tracked, included in brief, visible in PRs
-- **Private**: `.engram/private/decisions/`, `.engram/private/findings/`, `.engram/private/issues/`
+- **Private**: `.engram/_private/`
   - Git-ignored, excluded from brief, never auto-sent to Claude API
 
 Use private for:
@@ -94,8 +94,8 @@ Moving a file between public and private paths changes its visibility on next re
 ## Execution Steps
 
 1. **Determine type** from context: decision (chose X), finding (discovered X), issue (X needs attention)
-2. **Determine privacy**: sensitive content → `.engram/private/{type}s/`, everything else → `.engram/{type}s/`
-3. **Generate filename**: `{YYYY-MM-DD}-{slug}.md`
+2. **Determine privacy**: sensitive content → `.engram/_private/`, everything else → `.engram/signals/`
+3. **Generate filename**: `{type}-{slug}.md`
 4. **Write the file** using the Write tool with the appropriate schema above
 5. **Confirm** to the user what was captured
 
