@@ -992,17 +992,17 @@ test_session_end_output() {
   # Run session-end hook with CLAUDE_PLUGIN_ROOT set
   local hook_script="$SCRIPT_DIR/../hooks/session-end.sh"
 
-  # Test 1: no uncommitted signals — should nudge to capture
+  # SessionEnd hooks only support universal fields, not additionalContext.
+  # The hook should output empty JSON and exit cleanly.
   local output
-  # Use an empty plans dir to avoid picking up plans from other tests
   local empty_plans="$TEST_DIR/empty-plans-for-session-end"
   mkdir -p "$empty_plans"
-  output=$(cd "$repo_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." ENGRAM_PLANS_DIR="$empty_plans" bash "$hook_script" 2>/dev/null)
-  assert_contains "nudge when no signals" "$output" "No new signals were captured"
-  assert_contains "valid JSON output" "$output" "hookSpecificOutput"
-  assert_contains "SessionEnd event" "$output" "SessionEnd"
 
-  # Test 2: with uncommitted signal — should remind to commit
+  # Test 1: no uncommitted signals — should output empty JSON
+  output=$(cd "$repo_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." ENGRAM_PLANS_DIR="$empty_plans" bash "$hook_script" 2>/dev/null)
+  assert_eq "empty JSON when no signals" "$output" "{}"
+
+  # Test 2: with uncommitted signal — should still output empty JSON
   cat > "$dir/signals/decision-test-end.md" << 'EOF'
 ---
 type: decision
@@ -1015,8 +1015,7 @@ Content.
 EOF
 
   output=$(cd "$repo_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." ENGRAM_PLANS_DIR="$empty_plans" bash "$hook_script" 2>/dev/null)
-  assert_contains "remind when uncommitted" "$output" "uncommitted signal"
-  assert_contains "commit instruction" "$output" "git add .engram/"
+  assert_eq "empty JSON with uncommitted" "$output" "{}"
 
   cd "$SCRIPT_DIR"
 }
