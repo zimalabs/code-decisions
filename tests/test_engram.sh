@@ -101,6 +101,40 @@ _create_test_repo() {
   done
 }
 
+# Creates a repo with a mix of decision-worthy and trivial commits
+_create_test_repo_mixed() {
+  local repo_dir="$1"
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  # Decision-worthy commits
+  echo "v1" > Gemfile; git add Gemfile
+  git commit -q -m "feat: add user authentication"
+
+  echo "v2" > app.rb; git add app.rb
+  git commit -q -m "refactor: extract payment service"
+
+  echo "v3" > schema.sql; git add schema.sql
+  git commit -q -m "migrate users to new schema"
+
+  # Trivial commits (should be skipped)
+  echo "v4" > README.md; git add README.md
+  git commit -q -m "docs: update README"
+
+  echo "v5" > app.rb; git add app.rb
+  git commit -q -m "fix: handle nil email"
+
+  echo "v6" > test.rb; git add test.rb
+  git commit -q -m "test: add payment specs"
+
+  echo "v7" > style.css; git add style.css
+  git commit -q -m "chore: lint fixes"
+}
+
 # ── Tests ───────────────────────────────────────────────────────────
 
 test_init() {
@@ -258,26 +292,60 @@ EOF
   assert_contains "type correct" "$result" '"type":"issue"'
 }
 
+test_is_decision_commit() {
+  echo "test_is_decision_commit:"
+  local repo_dir="$TEST_DIR/test-classify-repo"
+  _create_test_repo_mixed "$repo_dir"
+  source "$LIB"
+
+  # Get all commit hashes
+  local hashes
+  hashes=$(git log --format='%H|%s' --reverse)
+
+  # Test each commit classification
+  while IFS='|' read -r hash subject; do
+    [ -z "$hash" ] && continue
+    local result
+    if _is_decision_commit "$subject" "$hash"; then
+      result="decision"
+    else
+      result="skip"
+    fi
+
+    case "$subject" in
+      "feat: add user authentication")    assert_eq "feat prefix → decision"    "$result" "decision" ;;
+      "refactor: extract payment service") assert_eq "refactor prefix → decision" "$result" "decision" ;;
+      "migrate users to new schema")      assert_eq "migrate keyword → decision" "$result" "decision" ;;
+      "docs: update README")              assert_eq "docs prefix → skip"         "$result" "skip" ;;
+      "fix: handle nil email")            assert_eq "fix prefix → skip"          "$result" "skip" ;;
+      "test: add payment specs")          assert_eq "test prefix → skip"         "$result" "skip" ;;
+      "chore: lint fixes")                assert_eq "chore prefix → skip"        "$result" "skip" ;;
+    esac
+  done <<< "$hashes"
+
+  cd "$SCRIPT_DIR"
+}
+
 test_ingest_commits() {
   echo "test_ingest_commits:"
   local repo_dir="$TEST_DIR/test-ingest-repo"
 
-  _create_test_repo "$repo_dir" 5
+  _create_test_repo_mixed "$repo_dir"
 
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
   engram_ingest_commits "$dir"
 
-  # Should have 5 decision files from 5 commits
+  # Should have 3 decision files (feat, refactor, migrate) out of 7 commits
   local file_count
   file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
-  assert_eq "5 commits ingested" "$file_count" "5"
+  assert_eq "3 decisions from 7 commits" "$file_count" "3"
 
   # Verify files have source: git:<hash>
   local has_source
   has_source=$(grep -rl "source: git:" "$dir/decisions/" | wc -l | tr -d ' ')
-  assert_eq "all have git source" "$has_source" "5"
+  assert_eq "all have git source" "$has_source" "3"
 
   cd "$SCRIPT_DIR"
 }
@@ -286,7 +354,7 @@ test_ingest_dedup() {
   echo "test_ingest_dedup:"
   local repo_dir="$TEST_DIR/test-dedup-repo"
 
-  _create_test_repo "$repo_dir" 3
+  _create_test_repo_mixed "$repo_dir"
 
   local dir="$repo_dir/.engram"
   source "$LIB"
@@ -310,17 +378,32 @@ test_ingest_brownfield() {
   echo "test_ingest_brownfield:"
   local repo_dir="$TEST_DIR/test-brownfield-repo"
 
-  _create_test_repo "$repo_dir" 100
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  # Create 100 commits: 60 feat (decisions) + 40 fix (skipped)
+  for i in $(seq 1 100); do
+    echo "content $i" > "file$i.txt"
+    git add "file$i.txt"
+    if [ $((i % 5)) -ne 0 ]; then
+      git commit -q -m "feat: add feature $i"
+    else
+      git commit -q -m "fix: typo in file $i"
+    fi
+  done
 
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
   engram_ingest_commits "$dir"
 
-  # Should only have last 50
+  # Brownfield scans last 50 commits. Of those 50, 40 are feat (decision) and 10 are fix (skip).
   local file_count
   file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
-  assert_eq "only 50 commits ingested (brownfield)" "$file_count" "50"
+  assert_eq "brownfield: only decisions from last 50" "$file_count" "40"
 
   cd "$SCRIPT_DIR"
 }
@@ -571,7 +654,19 @@ test_meta_preserved() {
 test_incremental_ingest() {
   echo "test_incremental_ingest:"
   local repo_dir="$TEST_DIR/test-incremental-repo"
-  _create_test_repo "$repo_dir" 3
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  # 3 initial decision-worthy commits
+  for i in 1 2 3; do
+    echo "v$i" > "feat$i.rb"
+    git add "feat$i.rb"
+    git commit -q -m "feat: add feature $i"
+  done
 
   local dir="$repo_dir/.engram"
   source "$LIB"
@@ -582,11 +677,11 @@ test_incremental_ingest() {
   first_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
   assert_eq "3 initial commits" "$first_count" "3"
 
-  # Add 2 more commits
-  echo "new content 4" > file4.txt
-  git add file4.txt && git commit -q -m "Commit 4: add file4.txt"
-  echo "new content 5" > file5.txt
-  git add file5.txt && git commit -q -m "Commit 5: add file5.txt"
+  # Add 2 more decision-worthy commits
+  echo "v4" > feat4.rb
+  git add feat4.rb && git commit -q -m "feat: add feature 4"
+  echo "v5" > feat5.rb
+  git add feat5.rb && git commit -q -m "refactor: extract shared module"
 
   engram_ingest_commits "$dir"
 
@@ -764,6 +859,8 @@ echo ""
 test_write_finding
 echo ""
 test_write_issue
+echo ""
+test_is_decision_commit
 echo ""
 test_ingest_commits
 echo ""

@@ -1,0 +1,14 @@
+{
+  "name": "zimalabs",
+  "owner": {
+    "name": "Zima Labs",
+    "url": "https://github.com/zimalabs"
+  },
+  "plugins": [
+    {
+      "name": "engram",
+      "source": "./",
+      "description": "Decision memory for AI agents. Git-tracked, zero-config, no vendor lock-in."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "engram",
   "version": "0.2.0",
-  "description": "The why database. Zero-friction decision store that auto-accumulates from git commits, git-tracks as markdown, and injects into every agent session.",
+  "description": "Decision memory for AI agents. Git-tracked, zero-config, no vendor lock-in.",
   "author": {
     "name": "Zima Labs",
     "url": "https://github.com/zimalabs"
