@@ -15,20 +15,23 @@ make test     # test suite only
 ## File Layout
 
 ```
-lib.sh                    # Core library — all functions live here
-schema.sql                # SQLite schema (signals table + FTS5 + triggers)
-hooks/
-  session-start.sh        # Ingest, reindex, brief, inject context
-  session-end.sh          # Ingest, reindex, brief (no injection)
-  hooks.json              # Hook registration (SessionStart + SessionEnd)
-skills/
-  capture/SKILL.md        # Write signal files via Write tool
-  query/SKILL.md          # SQL queries against index.db
-tests/
-  test_engram.sh          # 21 test groups
-  run_tests.sh            # Test runner wrapper
 .claude-plugin/
-  plugin.json             # Plugin manifest
+  marketplace.json        # Marketplace manifest (points to plugins/engram)
+plugins/engram/
+  .claude-plugin/
+    plugin.json           # Plugin manifest
+  lib.sh                  # Core library — all functions live here
+  schema.sql              # SQLite schema (signals table + FTS5 + triggers)
+  hooks/
+    session-start.sh      # Ingest, reindex, brief, inject context
+    session-end.sh        # Ingest, reindex, brief (no injection)
+    hooks.json            # Hook registration (SessionStart + SessionEnd)
+  skills/
+    capture/SKILL.md      # Write signal files via Write tool
+    query/SKILL.md        # SQL queries against index.db
+  tests/
+    test_engram.sh        # 21 test groups
+    run_tests.sh          # Test runner wrapper
 ```
 
 ## Key Concepts
@@ -69,8 +72,8 @@ Privacy: `private=0` (public), `private=1` (private)
 
 ## Adding a New Function
 
-1. Add the function to `lib.sh`
-2. Add tests to `tests/test_engram.sh`
+1. Add the function to `plugins/engram/lib.sh`
+2. Add tests to `plugins/engram/tests/test_engram.sh`
 3. Wire into hooks if it should run at session start/end
 4. Run `make check`
 

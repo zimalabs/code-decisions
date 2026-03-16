@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "engram",
-      "source": "./",
+      "source": "./plugins/engram",
       "description": "Decision memory for AI agents. Git-tracked, zero-config, no vendor lock-in."
     }
   ]

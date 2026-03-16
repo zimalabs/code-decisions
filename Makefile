@@ -1,9 +1,9 @@
 .PHONY: test lint check
 
 test:
-	bash tests/run_tests.sh
+	bash plugins/engram/tests/run_tests.sh
 
 lint:
-	shellcheck lib.sh hooks/*.sh tests/*.sh
+	shellcheck plugins/engram/lib.sh plugins/engram/hooks/*.sh plugins/engram/tests/*.sh
 
 check: lint test
