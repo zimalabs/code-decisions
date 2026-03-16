@@ -4,7 +4,7 @@
 
 **Decision memory for AI agents.** Git-tracked, zero-config, no vendor lock-in.
 
-A Claude Code plugin that gives your agents persistent memory of decisions, findings, and issues. Signals auto-accumulate from git commits, are stored as markdown, and injected into every session. No CLI. No commands to learn. No manual steps.
+A Claude Code plugin that gives your agents persistent memory of decisions. Signals auto-accumulate from git commits, are stored as markdown, and injected into every session. No CLI. No commands to learn. No manual steps.
 
 ## Install
 
@@ -93,11 +93,7 @@ SessionStart hook catches ALL changes — commits from VS Code, terminal, CI, ot
 | Other developer's commits | `git log` after `git pull` | Next session after pull |
 | Manual signal files | Developer writes `.engram/` file + commits | Next session after commit |
 
-## Signal Types
-
-Three types, each answering a different "why" question. All stored in `.engram/signals/` with type-prefixed filenames.
-
-### Decision — Why we chose X
+## Decision Signals
 
 File: `.engram/signals/decision-{slug}.md`
 
@@ -120,48 +116,6 @@ Team has 2 years of FastAPI experience. Async support is critical.
 
 ## Trade-offs
 Smaller ecosystem than Django. No built-in admin.
-```
-
-### Finding — Why we now know X
-
-File: `.engram/signals/finding-{slug}.md`
-
-```markdown
----
-date: 2026-03-11
-tags: [sqlite, search]
----
-
-# FTS5 requires explicit sync triggers
-
-SQLite FTS5 content= tables don't auto-update.
-
-## Trigger
-Index was returning stale results after inserts.
-
-## Implications
-Every table with FTS needs explicit triggers in the schema.
-```
-
-### Issue — Why X needs attention
-
-File: `.engram/signals/issue-{slug}.md`
-
-```markdown
----
-date: 2026-03-11
-tags: [ci, testing]
----
-
-# CI pipeline takes 45 minutes
-
-Integration tests run serially against a shared test database.
-
-## Impact
-Developers avoid running full test suite locally.
-
-## Next steps
-Investigate per-worker test databases.
 ```
 
 ## Linking Signals
@@ -195,7 +149,7 @@ Use `links:` for non-supersession relationships:
 ---
 date: 2026-03-15
 tags: [infrastructure]
-links: [related:finding-redis-latency, blocks:issue-notification-delay]
+links: [related:decision-redis-latency]
 ---
 
 # Switch to Redis Cluster
@@ -203,25 +157,7 @@ links: [related:finding-redis-latency, blocks:issue-notification-delay]
 Single-node Redis can't handle our pub/sub volume.
 ```
 
-Link types: `supersedes`, `related`, `blocks`, `blocked-by`.
-
-### Resolving issues
-
-Don't edit old issue files. Write a new signal that supersedes the original:
-
-```markdown
-# .engram/signals/decision-ci-optimized.md
----
-date: 2026-03-16
-supersedes: issue-ci-slow
----
-
-# CI pipeline optimized to 8 minutes
-
-Parallelized integration tests across 4 workers.
-```
-
-Issues with `status: resolved` or that have been superseded are counted but hidden from the brief.
+Link types: `supersedes`, `related`.
 
 ## Querying
 
@@ -231,13 +167,12 @@ Ask questions in natural language — Claude converts them to SQL automatically.
 
 ```
 @engram:query what decisions have we made about authentication?
-@engram:query any open issues?
 @engram:query what did we decide about caching last week?
 ```
 
 ### Full-text search
 
-Search across all signal types by keyword:
+Search across all decisions by keyword:
 
 ```
 @engram:query anything mentioning Redis?
@@ -264,18 +199,10 @@ Example chain: `decision-use-sessions` → `decision-use-jwt` → `decision-use-
 
 ### Relationship traversal
 
-Follow links between signals:
+Follow links between decisions:
 
 ```
 @engram:query what's related to the Redis decision?
-@engram:query what's blocking issue-notification-delay?
-```
-
-### Issue tracking
-
-```
-@engram:query show open issues
-@engram:query how many issues have been resolved?
 ```
 
 ### Direct SQL
@@ -283,7 +210,7 @@ Follow links between signals:
 Power users can pass raw SQL queries:
 
 ```
-@engram:query SELECT type, COUNT(*) as count FROM signals GROUP BY type
+@engram:query SELECT COUNT(*) as count FROM signals
 @engram:query SELECT title, date FROM signals WHERE date >= '2026-03-01' ORDER BY date DESC
 ```
 
@@ -291,12 +218,12 @@ Power users can pass raw SQL queries:
 
 | Skill | Purpose |
 |---|---|
-| `@engram:capture` | Guided signal creation — reads schemas, validates frontmatter, writes the file |
-| `@engram:query` | Query past signals in natural language or raw SQL (see [Querying](#querying)) |
+| `@engram:capture` | Guided signal creation — reads schema, validates frontmatter, writes the file |
+| `@engram:query` | Query past decisions in natural language or raw SQL (see [Querying](#querying)) |
 | `@engram:visualize` | Generate an interactive HTML dashboard — timeline, charts, link graph, searchable table |
 | `@engram:brief` | Regenerate and display the brief on demand — see updated context without restarting the session |
 | `@engram:reindex` | Rebuild `index.db` on demand after manual signal edits (no need to wait for next session) |
-| `@engram:introspect` | Interactive gap-filling loop — adds missing tags, links, body sections, and status to existing signals |
+| `@engram:introspect` | Interactive gap-filling loop — adds missing tags, links, and body sections to existing decisions |
 
 ## Automation
 
@@ -330,8 +257,8 @@ For sensitive content that shouldn't be git-tracked or auto-sent to the Claude A
 
 ```
 .engram/_private/decision-competitor-deal.md
-.engram/_private/finding-customer-churn-data.md
-.engram/_private/issue-personnel-concern.md
+.engram/_private/decision-customer-churn-data.md
+.engram/_private/decision-personnel-concern.md
 ```
 
 Private signals are:
@@ -351,16 +278,14 @@ Use private for: messaging content, CRM data, competitive intel, personnel decis
 ├── signals/                          # git-tracked
 │   ├── decision-use-fastapi.md
 │   ├── decision-jwt-auth.md
-│   ├── finding-fts5-triggers.md
-│   └── issue-ci-too-slow.md
+│   └── decision-redis-cluster.md
 ├── _private/                         # git-IGNORED
-│   ├── decision-competitor-deal.md
-│   └── finding-customer-churn.md
+│   └── decision-competitor-deal.md
 ├── brief.md                          # git-IGNORED (derived)
 └── index.db                          # git-IGNORED (derived)
 ```
 
-Filenames are type-prefixed: `decision-`, `finding-`, `issue-`. The filename stem (without `.md`) serves as a stable ID for linking between signals.
+Filenames are prefixed `decision-`. The filename stem (without `.md`) serves as a stable ID for linking between signals.
 
 Markdown files are the source of truth. `index.db` is derived — delete it anytime, rebuilt from files on next session.
 
@@ -368,7 +293,7 @@ Markdown files are the source of truth. `index.db` is derived — delete it anyt
 
 | | engram | claude-mem | supermemory |
 |---|---|---|---|
-| **What it stores** | Decisions, findings, issues | Key-value facts | Conversations, bookmarks, documents |
+| **What it stores** | Decisions | Key-value facts | Conversations, bookmarks, documents |
 | **Source of truth** | Markdown files in git | JSON in `~/.claude/` | Cloud database |
 | **Search** | FTS5 (local SQLite) | Keyword match | Vector similarity (cloud) |
 | **Context injection** | Auto (session hooks) | Auto (system prompt) | Manual / API |
@@ -398,7 +323,7 @@ They're complementary:
 - **CLAUDE.md** → "Use pytest for testing, prefer composition over inheritance"
 - **engram** → "Chose Redis over Memcached because we need pub/sub for notifications (2026-03-14)"
 
-CLAUDE.md doesn't grow. Engram does. After 50 sessions, your CLAUDE.md is the same 30 lines. Your `.engram/signals/` has 50+ signals that prevent the agent from re-debating settled architecture choices.
+CLAUDE.md doesn't grow. Engram does. After 50 sessions, your CLAUDE.md is the same 30 lines. Your `.engram/signals/` has 50+ decisions that prevent the agent from re-debating settled architecture choices.
 
 ### Does engram send my data anywhere?
 

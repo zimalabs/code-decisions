@@ -154,7 +154,6 @@ test_init() {
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore contains index.db" "$gitignore" "index.db"
   assert_contains "gitignore contains brief.md" "$gitignore" "brief.md"
-  assert_contains "gitignore contains visualize.html" "$gitignore" "visualize.html"
   assert_contains "gitignore contains _private/" "$gitignore" "_private/"
 
   # Idempotent: run again, no error
@@ -187,7 +186,6 @@ test_init_upgrade_gitignore() {
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore has index.db" "$gitignore" "index.db"
   assert_contains "gitignore has brief.md" "$gitignore" "brief.md"
-  assert_contains "gitignore has visualize.html" "$gitignore" "visualize.html"
   assert_contains "gitignore has _private/" "$gitignore" "_private/"
 }
 
@@ -228,70 +226,6 @@ EOF
   assert_contains "type correct" "$result" '"type":"decision"'
 }
 
-test_write_finding() {
-  echo "test_write_finding:"
-  local dir="$TEST_DIR/test-write-finding/.engram"
-
-  source "$LIB"
-  engram_init "$dir"
-
-  cat > "$dir/signals/finding-fts5-sync.md" << 'EOF'
----
-date: 2026-03-11
-tags: [sqlite, search]
-source: manual
----
-
-# FTS5 requires explicit sync triggers
-
-SQLite FTS5 content= tables don't auto-update.
-
-## Trigger
-Index was returning stale results after inserts.
-
-## Implications
-Every table with FTS needs explicit triggers.
-EOF
-
-  engram_reindex "$dir"
-
-  local result
-  result=$(sqlite3 -json "$dir/index.db" "SELECT type, title FROM signals WHERE type='finding';")
-  assert_contains "finding indexed" "$result" "FTS5 requires explicit sync triggers"
-  assert_contains "type correct" "$result" '"type":"finding"'
-}
-
-test_write_issue() {
-  echo "test_write_issue:"
-  local dir="$TEST_DIR/test-write-issue/.engram"
-
-  source "$LIB"
-  engram_init "$dir"
-
-  cat > "$dir/signals/issue-ci-slow.md" << 'EOF'
----
-date: 2026-03-11
-tags: [ci, testing]
----
-
-# CI pipeline takes 45 minutes
-
-Integration tests run serially.
-
-## Impact
-Developers avoid running full test suite locally.
-
-## Next steps
-Investigate per-worker test databases.
-EOF
-
-  engram_reindex "$dir"
-
-  local result
-  result=$(sqlite3 -json "$dir/index.db" "SELECT type, title FROM signals WHERE type='issue';")
-  assert_contains "issue indexed" "$result" "CI pipeline takes 45 minutes"
-  assert_contains "type correct" "$result" '"type":"issue"'
-}
 
 test_is_decision_commit() {
   echo "test_is_decision_commit:"
@@ -626,13 +560,13 @@ date: 2026-03-14
 Content A
 EOF
 
-  cat > "$dir/signals/finding-test-b.md" << 'EOF'
+  cat > "$dir/signals/decision-test-b.md" << 'EOF'
 ---
-type: finding
+type: decision
 date: 2026-03-14
 ---
 
-# Finding B
+# Decision B
 
 Content B
 EOF
@@ -670,17 +604,6 @@ date: 2026-03-14
 It's already in our stack.
 EOF
 
-  cat > "$dir/signals/issue-ci-slow.md" << 'EOF'
----
-type: issue
-date: 2026-03-14
----
-
-# CI is too slow
-
-Takes 45 minutes.
-EOF
-
   engram_reindex "$dir"
   engram_brief "$dir"
 
@@ -689,9 +612,7 @@ EOF
   local brief
   brief=$(cat "$dir/brief.md")
   assert_contains "brief has decisions header" "$brief" "Recent Decisions"
-  assert_contains "brief has issues header" "$brief" "Open Issues"
   assert_contains "brief has decision title" "$brief" "Pick Redis"
-  assert_contains "brief has issue title" "$brief" "CI is too slow"
   assert_contains "brief has counts" "$brief" "1 decisions"
 }
 
@@ -713,9 +634,9 @@ date: 2026-03-14
 Better JSON support and window functions.
 EOF
 
-  cat > "$dir/signals/finding-fts5.md" << 'EOF'
+  cat > "$dir/signals/decision-fts5.md" << 'EOF'
 ---
-type: finding
+type: decision
 date: 2026-03-14
 ---
 
@@ -960,9 +881,9 @@ test_private_queryable() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/_private/finding-competitor-intel.md" << 'EOF'
+  cat > "$dir/_private/decision-competitor-intel.md" << 'EOF'
 ---
-type: finding
+type: decision
 date: 2026-03-14
 tags: [competitive]
 ---
@@ -1421,45 +1342,6 @@ EOF
   assert_contains "brief has excerpt" "$brief" "Already in our stack"
 }
 
-test_issue_status() {
-  echo "test_issue_status:"
-  local dir="$TEST_DIR/test-issue-status/.engram"
-
-  source "$LIB"
-  engram_init "$dir"
-
-  cat > "$dir/signals/issue-ci-slow.md" << 'EOF'
----
-type: issue
-date: 2026-03-10
----
-
-# CI is too slow
-
-Takes 45 minutes.
-EOF
-
-  cat > "$dir/signals/issue-ci-fixed.md" << 'EOF'
----
-type: issue
-date: 2026-03-15
-status: resolved
-supersedes: issue-ci-slow
----
-
-# CI optimized to 8 minutes
-
-Parallelized tests.
-EOF
-
-  engram_reindex "$dir"
-  engram_brief "$dir"
-
-  local brief
-  brief=$(cat "$dir/brief.md")
-  assert_not_contains "superseded issue hidden" "$brief" "CI is too slow"
-  assert_contains "resolved count shown" "$brief" "resolved issue"
-}
 
 test_supersession_chain() {
   echo "test_supersession_chain:"
@@ -1524,7 +1406,7 @@ test_links_bidirectional() {
 ---
 type: decision
 date: 2026-03-14
-links: [related:finding-redis-perf]
+links: [related:decision-redis-perf]
 ---
 
 # Use Redis
@@ -1532,9 +1414,9 @@ links: [related:finding-redis-perf]
 For caching.
 EOF
 
-  cat > "$dir/signals/finding-redis-perf.md" << 'EOF'
+  cat > "$dir/signals/decision-redis-perf.md" << 'EOF'
 ---
-type: finding
+type: decision
 date: 2026-03-14
 ---
 
@@ -1545,15 +1427,15 @@ EOF
 
   engram_reindex "$dir"
 
-  # Query links from the finding's perspective (it's a target, not source)
-  local from_finding
-  from_finding=$(sqlite3 "$dir/index.db" "SELECT source_file FROM links WHERE target_file='finding-redis-perf';")
-  assert_eq "link findable from target side" "$from_finding" "decision-use-redis"
+  # Query links from the target's perspective
+  local from_target
+  from_target=$(sqlite3 "$dir/index.db" "SELECT source_file FROM links WHERE target_file='decision-redis-perf';")
+  assert_eq "link findable from target side" "$from_target" "decision-use-redis"
 
   # Query links from the decision's perspective (it's the source)
   local from_decision
   from_decision=$(sqlite3 "$dir/index.db" "SELECT target_file FROM links WHERE source_file='decision-use-redis';")
-  assert_eq "link findable from source side" "$from_decision" "finding-redis-perf"
+  assert_eq "link findable from source side" "$from_decision" "decision-redis-perf"
 }
 
 test_path_to_keywords() {
@@ -2021,10 +1903,6 @@ test_init_upgrade_gitignore
 echo ""
 test_write_decision
 echo ""
-test_write_finding
-echo ""
-test_write_issue
-echo ""
 test_is_decision_commit
 echo ""
 test_ingest_commits
@@ -2084,8 +1962,6 @@ echo ""
 test_brief_tag_grouping
 echo ""
 test_brief_excerpts
-echo ""
-test_issue_status
 echo ""
 test_supersession_chain
 echo ""
