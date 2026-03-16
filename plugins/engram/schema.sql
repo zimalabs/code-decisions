@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL CHECK(type IN ('decision','finding','issue')),
+    type TEXT NOT NULL CHECK(type IN ('decision')),
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     tags TEXT NOT NULL DEFAULT '[]',
@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS signals (
     file TEXT NOT NULL DEFAULT '',
     private INTEGER NOT NULL DEFAULT 0,
     excerpt TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT '',
     supersedes TEXT NOT NULL DEFAULT '',
     file_stem TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))

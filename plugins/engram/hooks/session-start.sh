@@ -17,20 +17,16 @@ engram_brief "$ENGRAM_DIR"
 # Gather stats for intro banner
 if [ -f "$ENGRAM_DIR/index.db" ]; then
   decisions=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision';" 2>/dev/null || echo "0")
-  findings=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='finding';" 2>/dev/null || echo "0")
-  issues=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='issue';" 2>/dev/null || echo "0")
   private=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE private=1;" 2>/dev/null || echo "0")
 else
-  decisions=0; findings=0; issues=0; private=0
+  decisions=0; private=0
 fi
-
-total=$((decisions + findings + issues))
 
 # Print intro banner to stderr (visible to user)
 {
   echo ""
   echo "  ◆ engram active"
-  echo "  ├─ $decisions decisions · $findings findings · $issues issues"
+  echo "  ├─ $decisions decisions"
   uncommitted_msg=$(engram_uncommitted_summary "$ENGRAM_DIR")
   if [ -n "$uncommitted_msg" ]; then
     echo "  ├─ $uncommitted_msg"
@@ -38,7 +34,7 @@ total=$((decisions + findings + issues))
   if [ "$private" -gt 0 ]; then
     echo "  ├─ $private private signals"
   fi
-  echo "  └─ $total signals indexed"
+  echo "  └─ $decisions signals indexed"
   echo ""
 } >&2
 
@@ -49,7 +45,7 @@ brief=$(cat "$ENGRAM_DIR/brief.md")
 instructions="$brief"
 
 # For large signal stores, append tag summary to help the agent know which domains have coverage
-if [ "$total" -gt 30 ]; then
+if [ "$decisions" -gt 30 ]; then
   tag_line=$(engram_tag_summary "$ENGRAM_DIR")
   if [ -n "$tag_line" ]; then
     instructions="$instructions
@@ -63,15 +59,9 @@ instructions="$instructions
 You have a persistent decision store via engram (.engram/ directory).
 When you make a significant decision, write a signal file:
   Write .engram/signals/decision-{slug}.md  (use the decision schema)
-When you discover something important:
-  Write .engram/signals/finding-{slug}.md   (use the finding schema)
-When you identify an issue:
-  Write .engram/signals/issue-{slug}.md     (use the issue schema)
 
 For PRIVATE signals (sensitive, never git-tracked or auto-sent to API):
   Write .engram/_private/decision-{slug}.md
-  Write .engram/_private/finding-{slug}.md
-  Write .engram/_private/issue-{slug}.md
 
 To query past signals:
   @engram:query <question>"

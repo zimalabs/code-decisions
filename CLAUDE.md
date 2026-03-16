@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Claude Code plugin that gives agents persistent decision memory. Signals (decisions, findings, issues) are git-tracked markdown files in `.engram/`. A derived SQLite index provides FTS5 search. No CLI — hooks handle everything automatically.
+Claude Code plugin that gives agents persistent decision memory. Decisions are git-tracked markdown files in `.engram/`. A derived SQLite index provides FTS5 search. No CLI — hooks handle everything automatically.
 
 ## Commands
 
@@ -25,8 +25,6 @@ plugins/engram/
   schemas/
     README.md             # Schema overview + shared field/link type reference
     decision.md           # Decision signal schema (source of truth)
-    finding.md            # Finding signal schema (source of truth)
-    issue.md              # Issue signal schema (source of truth)
   hooks/
     session-start.sh      # Ingest, reindex, brief, inject context
     session-end.sh        # Ingest, reindex, brief (no injection)
@@ -35,13 +33,13 @@ plugins/engram/
     capture/SKILL.md      # Write signal files via Write tool (reads schemas/)
     query/SKILL.md        # SQL queries against index.db
   tests/
-    test_engram.sh        # 31 test groups
+    test_engram.sh        # Test suite
     run_tests.sh          # Test runner wrapper
 ```
 
 ## Key Concepts
 
-- **Signals** = markdown files in `.engram/signals/` (prefixed by type: `decision-`, `finding-`, `issue-`)
+- **Signals** = decision markdown files in `.engram/signals/` (prefixed `decision-`)
 - **Private signals** = same format, in `.engram/_private/` (git-ignored, excluded from brief)
 - **index.db** = derived SQLite database, rebuilt from files every session. Safe to delete.
 - **brief.md** = generated summary injected into agent context. Public signals only.
@@ -67,15 +65,14 @@ engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brie
 ## Schema
 
 ```sql
-signals: id, type, title, content, tags, source, date, file, private, excerpt, status, supersedes, file_stem, created_at
+signals: id, type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, created_at
 signals_fts: FTS5 virtual table (title, content, tags) synced via triggers
-links: source_file, target_file, rel_type  (signal-to-signal relationships)
+links: source_file, target_file, rel_type  (decision-to-decision relationships)
 meta: key, value  (stores ingestion cursors like last_commit)
 ```
 
-Types: `decision`, `finding`, `issue`
+Type: `decision`
 Privacy: `private=0` (public), `private=1` (private)
-Status: `''` (default/open), `'resolved'`
 Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
 
 ## Adding a New Function
@@ -121,4 +118,4 @@ What counts as significant: architecture changes, new features, refactors, depen
 - SQL escaping: use `sed "s/'/''/g"`, not bash string replacement
 - Frontmatter parsing: manual line-by-line (no YAML parser dependency)
 - Hook timeout: 15 seconds (set in `hooks.json`)
-- Filenames: `{type}-{slug}.md`, slug via `_slugify()`
+- Filenames: `decision-{slug}.md`, slug via `_slugify()`

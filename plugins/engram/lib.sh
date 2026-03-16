@@ -431,13 +431,9 @@ _index_file() {
   [ -z "$fm_date" ] && fm_date=$(date +%Y-%m-%d)
   [ -z "$title" ] && title=$(basename "$filepath" .md)
 
-  # Derive type: frontmatter > filename prefix > default
+  # Derive type: frontmatter > default to decision
   local type="$fm_type"
-  if [ -z "$type" ]; then
-    local fname
-    fname=$(basename "$filepath")
-    type="decision"
-  fi
+  [ -z "$type" ] && type="decision"
 
   # Compute derived fields
   local file_stem

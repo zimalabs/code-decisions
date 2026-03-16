@@ -1,11 +1,11 @@
 ---
 name: engram:query
-description: "Query past decisions, findings, and issues from the engram index. Runs SQL against .engram/index.db via Bash. Use to look up context before starting work."
+description: "Query past decisions from the engram index. Runs SQL against .engram/index.db via Bash. Use to look up context before starting work."
 ---
 
 # @engram:query
 
-Query the engram index for past signals.
+Query the engram index for past decisions.
 
 ## Arguments
 
@@ -24,10 +24,10 @@ Parse `$ARGUMENTS` as either:
 sqlite3 -json .engram/index.db "SELECT s.id, s.type, s.title, s.date, s.content FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH 'keywords' ORDER BY rank LIMIT 10"
 ```
 
-3. **Use structured SQL** for filtering by type, date range, etc.:
+3. **Use structured SQL** for filtering by date range, tags, etc.:
 
 ```bash
-sqlite3 -json .engram/index.db "SELECT id, type, title, date, content FROM signals WHERE type = 'decision' ORDER BY date DESC LIMIT 10"
+sqlite3 -json .engram/index.db "SELECT id, title, date, content FROM signals ORDER BY date DESC LIMIT 10"
 ```
 
 4. **Combine** if needed — search first, then get full content
@@ -44,34 +44,28 @@ sqlite3 -json .engram/index.db "$ARGUMENTS"
 
 ```sql
 -- Recent decisions
-SELECT id, title, date, excerpt FROM signals WHERE type='decision' ORDER BY date DESC LIMIT 10
-
--- Open issues
-SELECT id, title, date, excerpt FROM signals WHERE type='issue' AND status != 'resolved' ORDER BY date DESC
+SELECT id, title, date, excerpt FROM signals ORDER BY date DESC LIMIT 10
 
 -- Search by keyword (FTS)
-SELECT s.id, s.type, s.title, s.date FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH 'keyword' ORDER BY rank LIMIT 10
+SELECT s.id, s.title, s.date FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH 'keyword' ORDER BY rank LIMIT 10
 
--- Signals from a date range
-SELECT id, type, title, date FROM signals WHERE date BETWEEN '2026-01-01' AND '2026-01-31' ORDER BY date
+-- Decisions from a date range
+SELECT id, title, date FROM signals WHERE date BETWEEN '2026-01-01' AND '2026-01-31' ORDER BY date
 
--- Counts by type
-SELECT type, COUNT(*) as count FROM signals GROUP BY type ORDER BY count DESC
+-- Total decision count
+SELECT COUNT(*) as count FROM signals
 
--- All recent signals
-SELECT id, type, title, date FROM signals ORDER BY date DESC LIMIT 20
+-- Public decisions only (excludes private)
+SELECT id, title, date FROM signals WHERE private=0 ORDER BY date DESC LIMIT 20
 
--- Public signals only (excludes private)
-SELECT id, type, title, date FROM signals WHERE private=0 ORDER BY date DESC LIMIT 20
-
--- Private signals only
-SELECT id, type, title, date FROM signals WHERE private=1 ORDER BY date DESC LIMIT 20
+-- Private decisions only
+SELECT id, title, date FROM signals WHERE private=1 ORDER BY date DESC LIMIT 20
 ```
 
 ## Link-Aware Patterns
 
 ```sql
--- What superseded a signal?
+-- What superseded a decision?
 SELECT file_stem, title, date FROM signals WHERE supersedes = 'decision-old-slug'
 
 -- Full supersession chain (walk backwards from current)
@@ -85,20 +79,12 @@ WITH RECURSIVE chain(stem, depth) AS (
 SELECT s.title, s.date, c.depth FROM chain c
 JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth
 
--- All signals linked to X (via links table)
-SELECT DISTINCT s.file_stem, s.title, s.type, l.rel_type
+-- All decisions linked to X (via links table)
+SELECT DISTINCT s.file_stem, s.title, l.rel_type
 FROM links l JOIN signals s
 ON s.file_stem = l.source_file OR s.file_stem = l.target_file
 WHERE (l.source_file = 'decision-x' OR l.target_file = 'decision-x')
 AND s.file_stem != 'decision-x'
-
--- Open issues with blockers
-SELECT s.title, l.target_file as blocks
-FROM signals s LEFT JOIN links l ON l.source_file = s.file_stem AND l.rel_type = 'blocks'
-WHERE s.type='issue' AND s.status != 'resolved'
-
--- Resolved issues
-SELECT file_stem, title, date FROM signals WHERE type='issue' AND status = 'resolved'
 ```
 
 ## Schema Reference
@@ -107,17 +93,16 @@ SQL tables:
 
 ```
 signals: id, type, title, content, tags (JSON array), source, date, file, private,
-         excerpt, status, supersedes, file_stem, created_at
+         excerpt, supersedes, file_stem, created_at
 links: source_file, target_file, rel_type
 meta: key, value
 ```
 
-Types: `decision`, `finding`, `issue`
+Type: `decision`
 Privacy: `private=0` (public, git-tracked), `private=1` (private, git-ignored)
-Status: `''` (default/open), `'resolved'`
 Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
 
-For signal file schemas (frontmatter fields, body sections, link types), see `${CLAUDE_PLUGIN_ROOT}/schemas/`.
+For signal file schema (frontmatter fields, body sections, link types), see `${CLAUDE_PLUGIN_ROOT}/schemas/`.
 
 ## If index.db is missing
 

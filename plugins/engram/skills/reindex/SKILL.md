@@ -20,9 +20,7 @@ engram_reindex "$ENGRAM_DIR" && \
 engram_brief "$ENGRAM_DIR" && \
 if [ -f "$ENGRAM_DIR/index.db" ]; then
   decisions=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision';" 2>/dev/null || echo "0")
-  findings=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='finding';" 2>/dev/null || echo "0")
-  issues=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='issue';" 2>/dev/null || echo "0")
-  echo "Reindexed: $decisions decisions, $findings findings, $issues issues"
+  echo "Reindexed: $decisions decisions"
 else
   echo "Error: index.db was not created"
   exit 1
@@ -31,4 +29,4 @@ fi
 
 ## Output
 
-Report the signal counts to the user after reindexing completes.
+Report the decision count to the user after reindexing completes.
