@@ -113,6 +113,8 @@ Body explaining what was decided and why.
 
 What counts as significant: architecture changes, new features, refactors, dependency changes, non-trivial bug fixes. Routine typo fixes or formatting do not need signals.
 
+**Commit messages** describe *what* changed. **Decision signals** describe *why* the choice was made, alternatives considered, and trade-offs. Auto-ingest catches decisions that weren't manually recorded — if you write a signal with the same slug as the commit subject, auto-ingest will skip it.
+
 ## Conventions
 
 - Table/FTS names: `signals`, `signals_fts` (not `notes`)

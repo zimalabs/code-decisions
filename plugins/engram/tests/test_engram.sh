@@ -421,6 +421,118 @@ test_ingest_dedup() {
   cd "$SCRIPT_DIR"
 }
 
+test_ingest_manual_signal_suppresses() {
+  echo "test_ingest_manual_signal_suppresses:"
+  local repo_dir="$TEST_DIR/test-manual-suppress-repo"
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  echo "v1" > widget.rb; git add widget.rb
+  git commit -q -m "feat: add widget"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+
+  # Pre-create a manual signal with the same slug auto-ingest would use
+  cat > "$dir/signals/decision-feat-add-widget.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [widget]
+---
+
+# Add widget component
+
+We chose a widget approach because it composes better than mixins.
+EOF
+
+  engram_ingest_commits "$dir"
+
+  # Should still have only 1 file — no decision-feat-add-widget-<hash>.md created
+  local file_count
+  file_count=$(find "$dir/signals" -name 'decision-feat-add-widget*' | wc -l | tr -d ' ')
+  assert_eq "manual signal suppresses auto-ingest" "$file_count" "1"
+
+  # Verify the file content is the manual one (no source: git: line)
+  assert_not_contains "manual signal preserved" "$(cat "$dir/signals/decision-feat-add-widget.md")" "source: git:"
+
+  cd "$SCRIPT_DIR"
+}
+
+test_ingest_private_signal_suppresses() {
+  echo "test_ingest_private_signal_suppresses:"
+  local repo_dir="$TEST_DIR/test-private-suppress-repo"
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  echo "v1" > cache.rb; git add cache.rb
+  git commit -q -m "feat: switch to redis for caching"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+
+  # Pre-create a private signal with the same slug
+  cat > "$dir/_private/decision-feat-switch-to-redis-for-caching.md" << 'EOF'
+---
+type: decision
+date: 2026-03-16
+tags: [caching]
+---
+
+# Switch to Redis for caching
+
+Private: contains vendor pricing details.
+EOF
+
+  engram_ingest_commits "$dir"
+
+  # No public signal should be created
+  local public_count
+  public_count=$(find "$dir/signals" -name 'decision-feat-switch-to-redis*' | wc -l | tr -d ' ')
+  assert_eq "private signal suppresses auto-ingest" "$public_count" "0"
+
+  cd "$SCRIPT_DIR"
+}
+
+test_ingest_no_manual_still_creates() {
+  echo "test_ingest_no_manual_still_creates:"
+  local repo_dir="$TEST_DIR/test-no-manual-repo"
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  echo "v1" > api.rb; git add api.rb
+  git commit -q -m "feat: add API gateway"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+  engram_ingest_commits "$dir"
+
+  # Auto-ingest should create the signal when no manual signal exists
+  local file_count
+  file_count=$(find "$dir/signals" -name 'decision-feat-add-api-gateway*' | wc -l | tr -d ' ')
+  assert_eq "auto-ingest creates signal when no manual" "$file_count" "1"
+
+  # Verify it has source: git:
+  assert_contains "auto-ingest has git source" "$(cat "$dir/signals"/decision-feat-add-api-gateway*.md)" "source: git:"
+
+  cd "$SCRIPT_DIR"
+}
+
 test_ingest_brownfield() {
   echo "test_ingest_brownfield:"
   local repo_dir="$TEST_DIR/test-brownfield-repo"
@@ -1822,6 +1934,12 @@ echo ""
 test_ingest_commits_body
 echo ""
 test_ingest_dedup
+echo ""
+test_ingest_manual_signal_suppresses
+echo ""
+test_ingest_private_signal_suppresses
+echo ""
+test_ingest_no_manual_still_creates
 echo ""
 test_ingest_brownfield
 echo ""

@@ -179,8 +179,11 @@ engram_ingest_commits() {
       continue
     fi
 
-    # Dedup: skip if file with this source already exists
+    # Dedup: skip if file with this source already exists (public or private)
     if grep -rql "source: git:$hash" "$dir/signals/" 2>/dev/null; then
+      continue
+    fi
+    if grep -rql "source: git:$hash" "$dir/_private/" 2>/dev/null; then
       continue
     fi
 
@@ -192,9 +195,12 @@ engram_ingest_commits() {
 
     local filepath="$dir/signals/decision-${slug}.md"
 
-    # Avoid filename collisions
+    # Manual signal with same slug already exists — defer to it
     if [ -f "$filepath" ]; then
-      filepath="$dir/signals/decision-${slug}-${hash:0:7}.md"
+      continue
+    fi
+    if [ -f "$dir/_private/decision-${slug}.md" ]; then
+      continue
     fi
 
     local stat

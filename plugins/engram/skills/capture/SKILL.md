@@ -98,3 +98,4 @@ Parallelized integration tests across 4 workers.
 - Keep individual signals focused on one thing
 - Tags are optional but help with filtering
 - Source field is optional (hooks auto-set `git:<hash>` or `plan:<file>`)
+- **Slug matching tip:** Use a slug that matches the commit subject so auto-ingest defers to your manual signal. E.g., if the commit will be "feat: switch to Redis for caching", name the signal `decision-feat-switch-to-redis-for-caching.md`.
