@@ -103,6 +103,8 @@ SELECT file_stem, title, date FROM signals WHERE type='issue' AND status = 'reso
 
 ## Schema Reference
 
+SQL tables:
+
 ```
 signals: id, type, title, content, tags (JSON array), source, date, file, private,
          excerpt, status, supersedes, file_stem, created_at
@@ -114,6 +116,8 @@ Types: `decision`, `finding`, `issue`
 Privacy: `private=0` (public, git-tracked), `private=1` (private, git-ignored)
 Status: `''` (default/open), `'resolved'`
 Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
+
+For signal file schemas (frontmatter fields, body sections, link types), see `${CLAUDE_PLUGIN_ROOT}/schemas/`.
 
 ## If index.db is missing
 

@@ -22,12 +22,17 @@ plugins/engram/
     plugin.json           # Plugin manifest
   lib.sh                  # Core library — all functions live here
   schema.sql              # SQLite schema (signals table + FTS5 + triggers)
+  schemas/
+    README.md             # Schema overview + shared field/link type reference
+    decision.md           # Decision signal schema (source of truth)
+    finding.md            # Finding signal schema (source of truth)
+    issue.md              # Issue signal schema (source of truth)
   hooks/
     session-start.sh      # Ingest, reindex, brief, inject context
     session-end.sh        # Ingest, reindex, brief (no injection)
     hooks.json            # Hook registration (SessionStart + SessionEnd)
   skills/
-    capture/SKILL.md      # Write signal files via Write tool
+    capture/SKILL.md      # Write signal files via Write tool (reads schemas/)
     query/SKILL.md        # SQL queries against index.db
   tests/
     test_engram.sh        # 31 test groups
