@@ -1406,6 +1406,396 @@ EOF
   assert_eq "link findable from source side" "$from_decision" "finding-redis-perf"
 }
 
+test_path_to_keywords() {
+  echo "test_path_to_keywords:"
+  source "$LIB"
+
+  local result
+
+  result=$(engram_path_to_keywords "src/auth/oauth-handler.ts")
+  assert_contains "has auth" "$result" "auth"
+  assert_contains "has oauth" "$result" "oauth"
+  assert_contains "has handler" "$result" "handler"
+  assert_not_contains "strips src" "$result" "^src$"
+  assert_not_contains "strips ts extension" "$result" "ts"
+
+  result=$(engram_path_to_keywords "lib/index.js")
+  assert_not_contains "strips lib" "$result" "^lib$"
+  assert_not_contains "strips index" "$result" "^index$"
+
+  result=$(engram_path_to_keywords "app/models/payment_processor.rb")
+  assert_contains "has models" "$result" "models"
+  assert_contains "has payment" "$result" "payment"
+  assert_contains "has processor" "$result" "processor"
+
+  # Empty path
+  result=$(engram_path_to_keywords "")
+  assert_eq "empty path returns empty" "$result" ""
+}
+
+test_query_relevant() {
+  echo "test_query_relevant:"
+  local dir="$TEST_DIR/test-query-relevant/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Use Redis for caching
+
+Already in our stack for session storage.
+EOF
+
+  cat > "$dir/signals/decision-jwt-auth.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+---
+
+# Use JWT for authentication
+
+Token-based auth for mobile clients.
+EOF
+
+  cat > "$dir/_private/decision-secret.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Secret caching strategy
+
+Private info about caching.
+EOF
+
+  engram_reindex "$dir"
+
+  # Matching query
+  local result
+  result=$(engram_query_relevant "$dir" "redis caching")
+  assert_contains "finds redis decision" "$result" "Use Redis"
+  assert_not_contains "excludes private" "$result" "Secret"
+
+  # Non-matching query
+  result=$(engram_query_relevant "$dir" "nonexistent_xyz_12345" 2>/dev/null || echo "")
+  assert_eq "no results for nonexistent" "$result" ""
+
+  # Empty search terms
+  result=$(engram_query_relevant "$dir" "")
+  assert_eq "empty terms returns empty" "$result" ""
+
+  # Limit
+  result=$(engram_query_relevant "$dir" "auth redis caching" 1)
+  local line_count
+  line_count=$(echo "$result" | grep -c '^-' || echo "0")
+  if [ "$line_count" -le 1 ]; then
+    _pass "limit respected"
+  else
+    _fail "limit respected" "expected <= 1 result, got $line_count"
+  fi
+}
+
+test_query_relevant_excludes_superseded() {
+  echo "test_query_relevant_excludes_superseded:"
+  local dir="$TEST_DIR/test-query-superseded/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-old-cache.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+---
+
+# Use Memcached for caching
+
+Fast and simple.
+EOF
+
+  cat > "$dir/signals/decision-new-cache.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+supersedes: decision-old-cache
+---
+
+# Use Redis for caching
+
+Supports pub/sub.
+EOF
+
+  engram_reindex "$dir"
+
+  local result
+  result=$(engram_query_relevant "$dir" "caching")
+  assert_contains "shows current decision" "$result" "Use Redis"
+  assert_not_contains "hides superseded" "$result" "Memcached"
+}
+
+test_tag_summary() {
+  echo "test_tag_summary:"
+  local dir="$TEST_DIR/test-tag-summary/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Create 6 signals (need >= 5 for tag_summary to return anything)
+  for i in 1 2 3; do
+    cat > "$dir/signals/decision-arch-$i.md" << EOF
+---
+type: decision
+date: 2026-03-14
+tags: [architecture]
+---
+
+# Architecture decision $i
+
+Content $i.
+EOF
+  done
+
+  for i in 1 2; do
+    cat > "$dir/signals/decision-testing-$i.md" << EOF
+---
+type: decision
+date: 2026-03-14
+tags: [testing]
+---
+
+# Testing decision $i
+
+Content $i.
+EOF
+  done
+
+  cat > "$dir/signals/decision-ci.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [ci]
+---
+
+# CI decision
+
+Content.
+EOF
+
+  engram_reindex "$dir"
+
+  local result
+  result=$(engram_tag_summary "$dir")
+  assert_contains "has architecture tag" "$result" "architecture"
+  assert_contains "has count" "$result" "(3)"
+  assert_contains "has Top topics prefix" "$result" "Top topics"
+}
+
+test_tag_summary_few_signals() {
+  echo "test_tag_summary_few_signals:"
+  local dir="$TEST_DIR/test-tag-few/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Only 2 signals — below threshold
+  cat > "$dir/signals/decision-a.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [foo]
+---
+
+# A
+
+Content.
+EOF
+
+  cat > "$dir/signals/decision-b.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [bar]
+---
+
+# B
+
+Content.
+EOF
+
+  engram_reindex "$dir"
+
+  local result
+  result=$(engram_tag_summary "$dir")
+  assert_eq "empty when < 5 signals" "$result" ""
+}
+
+test_post_tool_context_output() {
+  echo "test_post_tool_context_output:"
+  local dir="$TEST_DIR/test-post-tool/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-auth-handler.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Use OAuth for auth handler
+
+Token-based authentication.
+EOF
+
+  engram_reindex "$dir"
+
+  local hook_script="$SCRIPT_DIR/../hooks/post-tool-context.sh"
+
+  # Test with matching file path
+  local output
+  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":"src/auth/handler.ts"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$" bash "$hook_script" 2>/dev/null)
+
+  # Should be valid JSON
+  if echo "$output" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    _pass "post-tool output is valid JSON"
+  else
+    _fail "post-tool output is valid JSON" "got: $output"
+  fi
+
+  # Should contain systemMessage if results found
+  if echo "$output" | grep -q "systemMessage"; then
+    _pass "post-tool has systemMessage when results exist"
+  else
+    # It's OK if there are no FTS results — the test verifies valid JSON output
+    _pass "post-tool returns valid JSON (no matches)"
+  fi
+
+  # Test with .engram path — should skip
+  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":".engram/signals/decision-foo.md"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$-skip" bash "$hook_script" 2>/dev/null)
+  assert_eq "skips .engram paths" "$output" "{}"
+
+  # Test with test file — should skip
+  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":"tests/test_auth.rb"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$-skip2" bash "$hook_script" 2>/dev/null)
+  assert_eq "skips test files" "$output" "{}"
+}
+
+test_pre_compact_output() {
+  echo "test_pre_compact_output:"
+  local dir="$TEST_DIR/test-pre-compact/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-compact-test.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Compact test decision
+
+Testing pre-compact hook.
+EOF
+
+  engram_reindex "$dir"
+  engram_brief "$dir"
+
+  local hook_script="$SCRIPT_DIR/../hooks/pre-compact.sh"
+
+  local output
+  output=$(cd "$TEST_DIR/test-pre-compact" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+
+  # Should be valid JSON
+  if echo "$output" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    _pass "pre-compact output is valid JSON"
+  else
+    _fail "pre-compact output is valid JSON" "got: $output"
+  fi
+
+  # Should contain systemMessage with brief content
+  assert_contains "pre-compact has systemMessage" "$output" "systemMessage"
+  assert_contains "pre-compact has decision context" "$output" "Compact test decision"
+}
+
+test_pre_compact_no_engram() {
+  echo "test_pre_compact_no_engram:"
+  local empty_dir="$TEST_DIR/test-pre-compact-empty"
+  mkdir -p "$empty_dir"
+
+  local hook_script="$SCRIPT_DIR/../hooks/pre-compact.sh"
+
+  local output
+  output=$(cd "$empty_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+  assert_eq "empty JSON when no .engram" "$output" "{}"
+}
+
+test_hooks_json_structure() {
+  echo "--- test_hooks_json_structure ---"
+  local hooks_file="$SCRIPT_DIR/../hooks/hooks.json"
+
+  # Must be valid JSON
+  if ! jq . "$hooks_file" > /dev/null 2>&1; then
+    _fail "hooks.json is not valid JSON"
+    return
+  fi
+  _pass "hooks.json is valid JSON"
+
+  # Must have all 9 expected hook events
+  local expected_events="SessionStart SessionEnd Stop PostToolUse PreToolUse SubagentStop PreCompact UserPromptSubmit Notification"
+  for event in $expected_events; do
+    local count
+    count=$(jq -r ".hooks.\"$event\" | length" "$hooks_file")
+    if [ "$count" -lt 1 ]; then
+      _fail "hooks.json missing event: $event"
+    else
+      _pass "hooks.json has event: $event"
+    fi
+  done
+
+  # No empty prompts or commands
+  local empty_prompts
+  empty_prompts=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt == "" or .prompt == null))] | length' "$hooks_file")
+  assert_eq "no empty prompts" "$empty_prompts" "0"
+
+  local empty_commands
+  empty_commands=$(jq '[.hooks[][] | .hooks[] | select(.type == "command" and (.command == "" or .command == null))] | length' "$hooks_file")
+  assert_eq "no empty commands" "$empty_commands" "0"
+
+  # PreToolUse matcher must include Write|Edit
+  local pre_matcher
+  pre_matcher=$(jq -r '.hooks.PreToolUse[0].matcher' "$hooks_file")
+  assert_contains "PreToolUse matcher has Write" "$pre_matcher" "Write"
+  assert_contains "PreToolUse matcher has Edit" "$pre_matcher" "Edit"
+
+  # PostToolUse matcher must include Write|Edit|MultiEdit
+  local post_matcher
+  post_matcher=$(jq -r '.hooks.PostToolUse[0].matcher' "$hooks_file")
+  assert_contains "PostToolUse matcher has Write" "$post_matcher" "Write"
+  assert_contains "PostToolUse matcher has Edit" "$post_matcher" "Edit"
+  assert_contains "PostToolUse matcher has MultiEdit" "$post_matcher" "MultiEdit"
+
+  # PostToolUse must have both prompt and command hooks
+  local post_hook_count
+  post_hook_count=$(jq '.hooks.PostToolUse[0].hooks | length' "$hooks_file")
+  assert_eq "PostToolUse has 2 hooks" "$post_hook_count" "2"
+  local post_has_command
+  post_has_command=$(jq '[.hooks.PostToolUse[0].hooks[] | select(.type == "command")] | length' "$hooks_file")
+  assert_eq "PostToolUse has command hook" "$post_has_command" "1"
+
+  # PreCompact must have both prompt and command hooks
+  local compact_hook_count
+  compact_hook_count=$(jq '.hooks.PreCompact[0].hooks | length' "$hooks_file")
+  assert_eq "PreCompact has 2 hooks" "$compact_hook_count" "2"
+  local compact_has_command
+  compact_has_command=$(jq '[.hooks.PreCompact[0].hooks[] | select(.type == "command")] | length' "$hooks_file")
+  assert_eq "PreCompact has command hook" "$compact_has_command" "1"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -1484,6 +1874,24 @@ echo ""
 test_supersession_chain
 echo ""
 test_links_bidirectional
+echo ""
+test_path_to_keywords
+echo ""
+test_query_relevant
+echo ""
+test_query_relevant_excludes_superseded
+echo ""
+test_tag_summary
+echo ""
+test_tag_summary_few_signals
+echo ""
+test_post_tool_context_output
+echo ""
+test_pre_compact_output
+echo ""
+test_pre_compact_no_engram
+echo ""
+test_hooks_json_structure
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

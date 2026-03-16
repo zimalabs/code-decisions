@@ -46,7 +46,18 @@ total=$((decisions + findings + issues))
 [ -f "$ENGRAM_DIR/brief.md" ] || exit 0
 brief=$(cat "$ENGRAM_DIR/brief.md")
 
-instructions="$brief
+instructions="$brief"
+
+# For large signal stores, append tag summary to help the agent know which domains have coverage
+if [ "$total" -gt 30 ]; then
+  tag_line=$(engram_tag_summary "$ENGRAM_DIR")
+  if [ -n "$tag_line" ]; then
+    instructions="$instructions
+$tag_line"
+  fi
+fi
+
+instructions="$instructions
 
 ---
 You have a persistent decision store via engram (.engram/ directory).

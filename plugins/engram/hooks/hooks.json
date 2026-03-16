@@ -1,5 +1,5 @@
 {
-  "description": "engram: auto-init, ingest commits, index, brief at session start/end",
+  "description": "engram: decision capture + context injection via hooks — session lifecycle, code change nudges, signal validation, compaction safety, automatic context retrieval",
   "hooks": {
     "SessionStart": [
       {
@@ -30,6 +30,82 @@
           {
             "type": "prompt",
             "prompt": "Review this session. If the agent made significant code changes (new features, architecture changes, refactors, dependency changes, non-trivial bug fixes) via Write or Edit tools, check whether at least one NEW .engram/signals/ file was also created via the Write tool during this session. Files inside .engram/ themselves don't count as code changes. Trivial changes (typo fixes, formatting, comment-only edits, test-only changes, documentation-only changes) are exempt. If significant code changes exist but no .engram/signals/ file was written, return 'block' with reason: 'Significant changes need a decision signal — use @engram:capture to write .engram/signals/decision-{slug}.md'. Otherwise return 'approve'."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "A file was just written or edited. Check if this was a significant code change (new feature, architecture change, refactor, dependency change, non-trivial bug fix). Skip and return no message if ANY of these apply: (1) the file is inside .engram/, (2) the change is test-only, (3) the change is formatting/whitespace-only, (4) the change is documentation-only (README, comments, docs/). If the change IS significant, check whether an .engram/signals/ file has already been written during this session. If not, return a systemMessage: 'Consider recording this decision: @engram:capture can write a signal file.' Do NOT block — this is advisory only. Only nudge ONCE per session; if you have already nudged, return no message."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-context.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check the file path being written or edited. If the path does NOT target .engram/signals/ or .engram/_private/, return 'allow' immediately — do not check anything else. If the path DOES target .engram/signals/ or .engram/_private/, validate ALL of the following: (1) Filename matches pattern {type}-{slug}.md where type is one of: decision, finding, issue. (2) File content starts with '---' frontmatter delimiter on line 1. (3) File content contains a closing '---' frontmatter delimiter. (4) Frontmatter contains a 'date:' field. (5) Body after frontmatter contains at least one line of content. If ALL validations pass, return 'allow'. If ANY validation fails, return 'deny' with a specific error message explaining which validation failed and how to fix it."
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review what this subagent accomplished. If the subagent made architectural recommendations, design decisions, or suggested significant technical direction (e.g., choosing a library, proposing a data model, recommending an approach over alternatives), return 'approve' with a systemMessage: 'This subagent made recommendations that may warrant a decision signal. Consider using @engram:capture to record: [brief summary of the recommendation].' If the subagent only performed routine tasks (searching, reading, minor edits), return 'approve' with no message. Additionally, if the subagent's recommendations touch an area where past decisions may exist, suggest: 'Check for related past decisions with @engram:query <topic> before proceeding.'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Context is about to be compacted. Scan the conversation for decisions that were discussed or agreed upon but NOT yet recorded as .engram/signals/ files. Look for patterns like: agreements on technical approach, architecture choices, dependency decisions, trade-off resolutions, or explicit 'let's do X' statements. If you find unrecorded decisions, return a systemMessage listing them: 'Before compaction, these decisions appear unrecorded: [list]. Consider using @engram:capture to preserve them.' If all discussed decisions already have signal files, or no decisions were discussed, return no message. Never block compaction."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check if the user's message contains definitive decision language indicating a choice has been made. Look for phrases like: 'let's go with', 'we decided', 'switching to', 'going with', 'the decision is', 'we'll use', 'agreed on', 'settled on', 'choosing', 'picked'. Ignore hypotheticals and questions: 'should we', 'what if', 'maybe', 'could we', 'what about', 'considering'. If a definitive decision is detected AND no @engram:capture or .engram/signals/ write has been suggested yet in this conversation, return a systemMessage: 'That sounds like a decision. Consider recording it with @engram:capture.' Only nudge ONCE per conversation — if you have already nudged about a user decision, return no message. If no decision language is detected, return no message. Also check if the user is asking about past decisions, architecture, or prior work (e.g., 'why did we', 'what was decided', 'how do we handle', 'what's our approach to', 'remind me'). If so, return a systemMessage: 'Relevant past signals may exist — consider @engram:query <extracted topic>.' This detection is independent of the once-per-conversation decision-language nudge."
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check if the .engram/signals/ directory exists and contains any issue-*.md files. If it does, count how many issue files do NOT contain 'status: resolved' in their frontmatter. If there are open issues and at least one is older than 7 days (based on the date: field in frontmatter compared to today), return a systemMessage: 'You have [N] open engram issues. Use @engram:query to review them.' If there are no open issues older than 7 days, or no issue files exist, return no message."
           }
         ]
       }

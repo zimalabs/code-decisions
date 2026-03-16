@@ -61,6 +61,26 @@ _extract_excerpt() {
   echo "$1" | grep -v '^$' | grep -v '^#' | head -1 | cut -c1-120
 }
 
+_normalize_tags() {
+  # Convert YAML-style [a, b, c] to valid JSON ["a","b","c"]
+  local raw="$1"
+  case "$raw" in
+    '[]'|'') echo '[]'; return ;;
+    *'"'*) echo "$raw"; return ;;
+  esac
+  local inner="${raw#\[}"; inner="${inner%\]}"
+  local result="["
+  local first=1
+  while IFS= read -r tag; do
+    tag="${tag# }"; tag="${tag% }"
+    [ -z "$tag" ] && continue
+    [ "$first" -eq 1 ] && first=0 || result="$result,"
+    result="$result\"$tag\""
+  done <<< "$(echo "$inner" | tr ',' '\n')"
+  result="$result]"
+  echo "$result"
+}
+
 _parse_links() {
   local str="$1"
   str="${str#\[}"; str="${str%\]}"
@@ -384,7 +404,8 @@ _index_file() {
           type:*)       fm_type="${line#type:}"; fm_type="${fm_type# }";;
           date:*)       fm_date="${line#date:}"; fm_date="${fm_date# }";;
           source:*)     fm_source="${line#source:}"; fm_source="${fm_source# }";;
-          tags:*)       fm_tags="${line#tags:}"; fm_tags="${fm_tags# }";;
+          tags:*)       fm_tags="${line#tags:}"; fm_tags="${fm_tags# }"
+                        fm_tags=$(_normalize_tags "$fm_tags");;
           supersedes:*) fm_supersedes="${line#supersedes:}"; fm_supersedes="${fm_supersedes# }";;
           status:*)     fm_status="${line#status:}"; fm_status="${fm_status# }";;
           links:*)      fm_links="${line#links:}"; fm_links="${fm_links# }";;
@@ -498,12 +519,12 @@ engram_brief() {
 
   # ── Decisions: tag-grouped with excerpts, excluding superseded ──
   local distinct_tags
-  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT CASE WHEN tags != '[]' AND tags != '' THEN REPLACE(REPLACE(SUBSTR(tags, 1, INSTR(tags||',', ',')-1), '[', ''), ']', '') ELSE NULL END) FROM signals WHERE type='decision' AND private=0 $superseded_in;" 2>/dev/null || echo "0")
+  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
 
   if [ "$distinct_tags" -ge 3 ]; then
     # Tag-grouped decisions
     local tag_groups
-    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT REPLACE(REPLACE(SUBSTR(tags, 1, INSTR(tags||',', ',')-1), '[', ''), ']', '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
+    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$tag_groups" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"
       while IFS='|' read -r tag entries; do
@@ -560,6 +581,105 @@ engram_brief() {
   fi
 
   printf '%s\n' "$brief" > "$dir/brief.md"
+}
+
+# ── Path to keywords ──────────────────────────────────────────────
+
+engram_path_to_keywords() {
+  local filepath="$1"
+  # Strip extension
+  local base="${filepath%.*}"
+  # Split on / - _ . and filter noise words
+  local words
+  words=$(printf '%s' "$base" | tr '/' '\n' | tr '-' '\n' | tr '_' '\n' | tr '.' '\n' | tr '[:upper:]' '[:lower:]')
+  local noise="src lib app index test spec the and is of to in for a an"
+  local seen="" result=""
+  while IFS= read -r word; do
+    [ -z "$word" ] && continue
+    # Skip noise words
+    case " $noise " in
+      *" $word "*) continue ;;
+    esac
+    # Deduplicate
+    case " $seen " in
+      *" $word "*) continue ;;
+    esac
+    seen="$seen $word"
+    [ -n "$result" ] && result="$result "
+    result="$result$word"
+  done <<< "$words"
+  printf '%s' "$result"
+}
+
+# ── Query relevant signals ───────────────────────────────────────
+
+engram_query_relevant() {
+  local dir="$1"
+  local search_terms="$2"
+  local limit="${3:-3}"
+
+  [ -z "$search_terms" ] && return 0
+  [ -f "$dir/index.db" ] || return 0
+
+  # Build OR-joined FTS5 query
+  local fts_query=""
+  for term in $search_terms; do
+    [ -n "$fts_query" ] && fts_query="$fts_query OR "
+    local esc_term
+    esc_term=$(printf '%s' "$term" | sed "s/'/''/g")
+    fts_query="$fts_query$esc_term"
+  done
+
+  [ -z "$fts_query" ] && return 0
+
+  # Exclude private and superseded signals
+  local results
+  results=$(sqlite3 -separator '|' "$dir/index.db" "SELECT s.date, s.title, s.excerpt FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH '$fts_query' AND s.private = 0 AND s.file_stem NOT IN (SELECT supersedes FROM signals WHERE supersedes != '') ORDER BY rank LIMIT $limit;" 2>/dev/null || echo "")
+
+  [ -z "$results" ] && return 0
+
+  while IFS='|' read -r date title excerpt; do
+    [ -z "$title" ] && continue
+    if [ -n "$excerpt" ]; then
+      printf -- '- [%s] %s — %s\n' "$date" "$title" "$excerpt"
+    else
+      printf -- '- [%s] %s\n' "$date" "$title"
+    fi
+  done <<< "$results"
+}
+
+# ── Tag summary ──────────────────────────────────────────────────
+
+engram_tag_summary() {
+  local dir="$1"
+
+  [ -f "$dir/index.db" ] || return 0
+
+  # Check minimum signal count
+  local total
+  total=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE private=0;" 2>/dev/null || echo "0")
+  [ "$total" -lt 5 ] && return 0
+
+  # Extract individual tags from JSON arrays and count them
+  local tag_counts
+  tag_counts=$(sqlite3 "$dir/index.db" "
+    SELECT j.value AS tag, COUNT(*) AS cnt
+    FROM signals, json_each(signals.tags) j
+    WHERE signals.private = 0 AND signals.tags != '[]'
+    GROUP BY j.value ORDER BY cnt DESC LIMIT 8;
+  " 2>/dev/null | awk -F'|' '{print $2, $1}')
+
+  [ -z "$tag_counts" ] && return 0
+
+  local parts=""
+  while read -r cnt tag; do
+    [ -z "$tag" ] && continue
+    [ -n "$parts" ] && parts="$parts, "
+    parts="$parts$tag ($cnt)"
+  done <<< "$tag_counts"
+
+  [ -z "$parts" ] && return 0
+  printf 'Top topics: %s' "$parts"
 }
 
 # ── Uncommitted signal summary ─────────────────────────────────────
