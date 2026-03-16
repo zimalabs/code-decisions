@@ -160,7 +160,25 @@ engram_ingest_commits() {
     local stat
     stat=$(git show --stat --format='' "$hash" 2>/dev/null || echo "")
 
-    cat > "$filepath" << SIGNAL
+    # Extract commit body, strip Co-Authored-By trailers and trailing blank lines
+    local body
+    body=$(git log -1 --format='%b' "$hash" 2>/dev/null | grep -iv '^Co-Authored-By:' | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+    if [ -n "$body" ]; then
+      cat > "$filepath" << SIGNAL
+---
+date: $date
+source: git:$hash
+---
+
+# $subject
+
+$body
+
+$stat
+SIGNAL
+    else
+      cat > "$filepath" << SIGNAL
 ---
 date: $date
 source: git:$hash
@@ -170,6 +188,7 @@ source: git:$hash
 
 $stat
 SIGNAL
+    fi
 
     count=$((count + 1))
   done <<< "$log_output"

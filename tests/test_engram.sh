@@ -350,6 +350,54 @@ test_ingest_commits() {
   cd "$SCRIPT_DIR"
 }
 
+test_ingest_commits_body() {
+  echo "test_ingest_commits_body:"
+  local repo_dir="$TEST_DIR/test-ingest-body-repo"
+
+  mkdir -p "$repo_dir"
+  cd "$repo_dir"
+  git init -q
+  git config user.email "test@test.com"
+  git config user.name "Test"
+
+  # Commit with a body explaining rationale
+  echo "v1" > auth.rb; git add auth.rb
+  git commit -q -m "feat: add OAuth2 authentication" -m "We chose OAuth2 over SAML because our mobile clients need token-based auth.
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+  # Commit without a body
+  echo "v2" > api.rb; git add api.rb
+  git commit -q -m "refactor: extract API gateway"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+  engram_ingest_commits "$dir"
+
+  # Should have 2 decision files
+  local file_count
+  file_count=$(find "$dir/decisions" -name '*.md' | wc -l | tr -d ' ')
+  assert_eq "2 decisions created" "$file_count" "2"
+
+  # Verify body appears in the OAuth2 signal file
+  local oauth_file
+  oauth_file=$(grep -rl "OAuth2" "$dir/decisions/" | head -1)
+  local content
+  content=$(cat "$oauth_file")
+  assert_contains "body included in signal" "$content" "token-based auth"
+  assert_not_contains "Co-Authored-By stripped" "$content" "Co-Authored-By"
+
+  # Verify the no-body commit doesn't have extra blank lines between title and stat
+  local api_file
+  api_file=$(grep -rl "API gateway" "$dir/decisions/" | head -1)
+  local api_content
+  api_content=$(cat "$api_file")
+  assert_contains "no-body signal has stat" "$api_content" "api.rb"
+
+  cd "$SCRIPT_DIR"
+}
+
 test_ingest_dedup() {
   echo "test_ingest_dedup:"
   local repo_dir="$TEST_DIR/test-dedup-repo"
@@ -979,6 +1027,8 @@ echo ""
 test_is_decision_commit
 echo ""
 test_ingest_commits
+echo ""
+test_ingest_commits_body
 echo ""
 test_ingest_dedup
 echo ""
