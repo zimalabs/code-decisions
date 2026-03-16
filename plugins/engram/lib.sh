@@ -51,7 +51,7 @@ _migrate_signals_to_decisions() {
     for f in "$target_dir2"/*.md; do
       [ -f "$f" ] || continue
       if grep -qE '^(supersedes|links):.*decision-' "$f" 2>/dev/null; then
-        sed -i '' 's/\(supersedes: *\)decision-/\1/g; s/\(related:\)decision-/\1/g; s/\(blocks:\)decision-/\1/g; s/\(blocked-by:\)decision-/\1/g' "$f"
+        sed 's/\(supersedes: *\)decision-/\1/g; s/\(related:\)decision-/\1/g; s/\(blocks:\)decision-/\1/g; s/\(blocked-by:\)decision-/\1/g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
       fi
     done
   done
