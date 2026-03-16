@@ -7,10 +7,24 @@ set -euo pipefail
 ENGRAM_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGRAM_SCHEMA_FILE="${ENGRAM_SCHEMA_FILE:-$ENGRAM_LIB_DIR/schema.sql}"
 
+# ── FTS5 check ────────────────────────────────────────────────────────
+
+_check_fts5() {
+  if ! sqlite3 ':memory:' "CREATE VIRTUAL TABLE _fts5_test USING fts5(x);" 2>/dev/null; then
+    echo "engram: SQLite FTS5 module not available." >&2
+    echo "engram: Install SQLite with FTS5 support:" >&2
+    echo "engram:   macOS:  brew install sqlite && export PATH=\"\$(brew --prefix sqlite)/bin:\$PATH\"" >&2
+    echo "engram:   Ubuntu: sudo apt-get install -y libsqlite3-0" >&2
+    echo "engram:   Alpine: apk add sqlite" >&2
+    return 1
+  fi
+}
+
 # ── Init ──────────────────────────────────────────────────────────────
 
 engram_init() {
   local dir="$1"
+  _check_fts5
   mkdir -p "$dir"/{decisions,findings,issues}
   mkdir -p "$dir"/private/{decisions,findings,issues}
   if [ ! -f "$dir/.gitignore" ]; then

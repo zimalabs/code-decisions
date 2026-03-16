@@ -735,11 +735,24 @@ EOF
   assert_eq "public signal has private=0" "$private_val" "0"
 }
 
+test_fts5_check() {
+  echo "test_fts5_check:"
+
+  source "$LIB"
+
+  # _check_fts5 should succeed on this machine (tests already use FTS5)
+  _check_fts5
+  local rc=$?
+  assert_eq "_check_fts5 succeeds" "$rc" "0"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
 echo ""
 
+test_fts5_check
+echo ""
 test_init
 echo ""
 test_init_private_dirs

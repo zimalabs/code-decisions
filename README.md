@@ -14,6 +14,9 @@ claude plugin install zimalabs/engram
 
 That's it. No `engram init`. No configuration.
 
+> **Requires:** SQLite 3.35+ with FTS5 (ships with macOS 10.14+, most Linux distros).
+> If you see "no such module: fts5", run `brew install sqlite` (macOS) or `sudo apt-get install libsqlite3-0` (Ubuntu).
+
 ## How It Works
 
 ### First session (greenfield or brownfield)
