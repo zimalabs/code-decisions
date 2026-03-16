@@ -49,6 +49,58 @@ _slugify() {
     | cut -c1-50
 }
 
+# ── Commit classification ────────────────────────────────────────────
+
+# Conventional commit prefixes that represent decisions
+_DECISION_PREFIXES="feat|feat!|breaking|refactor|perf"
+
+# Prefixes that are never decisions
+_SKIP_PREFIXES="fix|docs|test|tests|chore|ci|style|build|typo|wip|merge"
+
+# Commit message patterns that indicate architectural/dependency decisions
+_DECISION_PATTERNS="migrate|switch to|replace|drop|remove|add support|adopt|introduce|upgrade|deprecate|rewrite"
+
+# Files whose presence in a commit's diff indicates a decision
+_DECISION_FILES="Gemfile|package.json|Cargo.toml|go.mod|requirements.txt|Pipfile|pyproject.toml|schema.rb|structure.sql|docker-compose|Dockerfile|\.github/workflows|\.circleci|Makefile"
+
+_is_decision_commit() {
+  local subject="$1"
+  local hash="$2"
+
+  local lower_subject
+  lower_subject=$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')
+
+  # Skip: conventional commit prefixes that aren't decisions
+  if printf '%s' "$lower_subject" | grep -qE "^(${_SKIP_PREFIXES})[:(]"; then
+    return 1
+  fi
+
+  # Skip: merge commits, version bumps, trivial messages
+  if printf '%s' "$lower_subject" | grep -qE "^(merge branch|merge pull|bump version|wip$|wip:|fixup!|squash!)"; then
+    return 1
+  fi
+
+  # Match: conventional commit prefixes that are decisions
+  if printf '%s' "$lower_subject" | grep -qE "^(${_DECISION_PREFIXES})[:(]"; then
+    return 0
+  fi
+
+  # Match: keyword patterns in the message
+  if printf '%s' "$lower_subject" | grep -qiE "(${_DECISION_PATTERNS})"; then
+    return 0
+  fi
+
+  # Match: significant file changes (schema, deps, CI, infra)
+  local files_changed
+  files_changed=$(git diff-tree --no-commit-id --name-only -r "$hash" 2>/dev/null || echo "")
+  if printf '%s' "$files_changed" | grep -qE "(${_DECISION_FILES})"; then
+    return 0
+  fi
+
+  # Default: not a decision
+  return 1
+}
+
 # ── Commit ingestion ─────────────────────────────────────────────────
 
 engram_ingest_commits() {
@@ -81,6 +133,11 @@ engram_ingest_commits() {
 
     # Track newest commit (first line of output)
     [ -z "$new_head" ] && new_head="$hash"
+
+    # Only ingest commits that look like decisions
+    if ! _is_decision_commit "$subject" "$hash"; then
+      continue
+    fi
 
     # Dedup: skip if file with this source already exists
     if grep -rql "source: git:$hash" "$dir/decisions/" 2>/dev/null; then
@@ -117,7 +174,7 @@ SIGNAL
     count=$((count + 1))
   done <<< "$log_output"
 
-  # Update last_commit pointer
+  # Update last_commit pointer (always advance, even if no decisions found)
   if [ -n "$new_head" ]; then
     sqlite3 "$dir/index.db" "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_commit', '$new_head');" 2>/dev/null || true
   fi
@@ -127,7 +184,30 @@ SIGNAL
 
 engram_ingest_plans() {
   local dir="$1"
-  local plans_dir="${ENGRAM_PLANS_DIR:-$HOME/.claude/plans}"
+
+  # Resolve project-scoped plans directory.
+  # Claude Code stores per-project data under ~/.claude/projects/<mangled-path>/
+  # where <mangled-path> is the absolute CWD with / replaced by -.
+  # The global ~/.claude/plans/ is shared across ALL projects and must NOT be
+  # ingested — doing so leaks signals from unrelated repos.
+  local plans_dir="${ENGRAM_PLANS_DIR:-}"
+  if [ -z "$plans_dir" ]; then
+    local project_key
+    project_key=$(pwd | sed 's|/|-|g')
+    plans_dir="$HOME/.claude/projects/${project_key}/plans"
+  fi
+
+  # Safety: never ingest from the global plans directory — it contains
+  # plans from ALL projects and would leak unrelated signals.
+  local global_plans
+  global_plans=$(cd "$HOME/.claude/plans" 2>/dev/null && pwd -P 2>/dev/null || echo "")
+  if [ -n "$global_plans" ]; then
+    local resolved_plans
+    resolved_plans=$(cd "$plans_dir" 2>/dev/null && pwd -P 2>/dev/null || echo "")
+    if [ "$resolved_plans" = "$global_plans" ]; then
+      return 0
+    fi
+  fi
 
   [ -d "$plans_dir" ] || return 0
 
