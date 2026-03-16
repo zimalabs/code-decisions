@@ -1,8 +1,10 @@
+[![CI](https://github.com/zimalabs/engram/actions/workflows/ci.yml/badge.svg)](https://github.com/zimalabs/engram/actions/workflows/ci.yml)
+
 # engram
 
-**The why database.** Your agents remember why things are the way they are.
+**Decision memory for AI agents.** Git-tracked, zero-config, no vendor lock-in.
 
-Install the plugin. Signals auto-accumulate from git commits, are git-tracked as markdown, and injected into every agent session. No CLI. No commands to learn. No manual steps.
+A Claude Code plugin that gives your agents persistent memory of decisions, findings, and issues. Signals auto-accumulate from git commits, are stored as markdown, and injected into every session. No CLI. No commands to learn. No manual steps.
 
 ## Install
 
@@ -196,15 +198,51 @@ Markdown files are the source of truth. `index.db` is derived — delete it anyt
 
 ## Comparison
 
-| | ADRs | Claude auto-memory | Plans | engram |
-|---|---|---|---|---|
-| Structured | Yes | No | Partial | Yes |
-| Automatic | No (manual) | Yes | Yes | Yes |
-| Permanent | Yes | Yes | No (ephemeral) | Yes |
-| Git-tracked | Yes | No | No | Yes |
-| Queryable | No | No | No | Yes (FTS5) |
-| In PRs | Sometimes | Never | Never | Always |
-| Brownfield | No | No | No | Yes (git history) |
+| | engram | claude-mem | supermemory |
+|---|---|---|---|
+| **What it stores** | Decisions, findings, issues | Key-value facts | Conversations, bookmarks, documents |
+| **Source of truth** | Markdown files in git | JSON in `~/.claude/` | Cloud database |
+| **Search** | FTS5 (local SQLite) | Keyword match | Vector similarity (cloud) |
+| **Context injection** | Auto (session hooks) | Auto (system prompt) | Manual / API |
+| **Capture model** | Write tool + git ingest | CLI commands | Browser extension / API |
+| **Runtime deps** | SQLite (ships with OS) | Node.js | Docker + cloud services |
+| **Privacy** | Local-only, git-ignored private tier | Local files | Cloud-hosted |
+| **Git integration** | Native (signals in PRs) | None | None |
+| **Cost** | Free | Free | Free tier + paid plans |
+| **Overhead** | Zero config, no commands | `mem add` / `mem search` | Setup + API keys |
+| **Self-hostable** | Yes (it's just files) | Yes | Yes (Docker) |
+
+### Key differentiators
+
+**engram** is purpose-built for decision memory — the "why" behind code changes. Signals live in git alongside the code they describe, show up in PRs and diffs, and survive across tools, editors, and team members. Zero runtime dependencies beyond SQLite.
+
+**claude-mem** is a general-purpose key-value memory for Claude Code. Good for remembering user preferences and short facts. Lightweight, but memories are local to one machine and invisible to code review.
+
+**supermemory** is a cloud-native knowledge base for teams. Strong at ingesting diverse sources (bookmarks, conversations, documents) and semantic search. Best when you need cross-tool memory with a managed service. Requires cloud infrastructure.
+
+## FAQ
+
+### How is this different from CLAUDE.md?
+
+`CLAUDE.md` is static instructions — you write it once and update it manually. It tells the agent *how* to behave. Engram is dynamic decision accumulation — signals are created automatically as the agent works, capturing *why* decisions were made.
+
+They're complementary:
+- **CLAUDE.md** → "Use pytest for testing, prefer composition over inheritance"
+- **engram** → "Chose Redis over Memcached because we need pub/sub for notifications (2026-03-14)"
+
+CLAUDE.md doesn't grow. Engram does. After 50 sessions, your CLAUDE.md is the same 30 lines. Your `.engram/decisions/` has 50+ signals that prevent the agent from re-debating settled architecture choices.
+
+### Does engram send my data anywhere?
+
+No. Everything is local. Signals are markdown files on disk. The index is a local SQLite database. There are no network calls, no cloud services, no telemetry. Private signals are git-ignored and never injected into agent context.
+
+### Can I use engram with other AI tools?
+
+The signals are plain markdown files in git. Any tool that can read files can read your decision history. The Claude Code plugin (hooks, skills, context injection) is Claude-specific, but the signal format is universal.
+
+### What happens if I delete index.db?
+
+Nothing bad. It's rebuilt from the markdown files on the next session start. The markdown files are the source of truth — the database is derived.
 
 ## Contributing
 
