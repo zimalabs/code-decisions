@@ -16,6 +16,8 @@ File: `.engram/signals/decision-{slug}.md`
 ---
 date: YYYY-MM-DD
 tags: [topic1, topic2]
+supersedes: decision-old-slug    # optional: replaces a prior decision
+links: [related:finding-x]       # optional: related, blocks, blocked-by
 ---
 
 # Title of the decision
@@ -40,6 +42,8 @@ File: `.engram/signals/finding-{slug}.md`
 ---
 date: YYYY-MM-DD
 tags: [topic1, topic2]
+supersedes: finding-old-slug     # optional: replaces a prior finding
+links: [related:decision-x]     # optional: related, blocks, blocked-by
 ---
 
 # Title of the finding
@@ -60,6 +64,9 @@ File: `.engram/signals/issue-{slug}.md`
 ---
 date: YYYY-MM-DD
 tags: [topic1, topic2]
+status: open                     # optional: open (default) or resolved
+supersedes: issue-old-slug       # optional: replaces a prior issue
+links: [blocks:issue-y]          # optional: related, blocks, blocked-by
 ---
 
 # Title of the issue
@@ -107,6 +114,41 @@ If no type given:
 - Choices or directions set -> `decision`
 - New information discovered -> `finding`
 - Problems or blockers -> `issue`
+
+## Linking Signals
+
+Use `supersedes:` to mark a signal as replacing a prior one. The superseded signal is hidden from the brief but remains queryable.
+
+```markdown
+supersedes: decision-old-auth    # this decision replaces decision-old-auth
+```
+
+Use `links:` to express non-supersession relationships:
+
+```markdown
+links: [related:finding-fts5-perf, blocks:issue-ci-timeout]
+```
+
+### Link Types
+- **supersedes** — this signal replaces the target (target hidden from brief)
+- **related** — informational connection
+- **blocks** — this signal blocks the target from being resolved
+- **blocked-by** — this signal is blocked by the target
+
+### Resolving Issues
+
+Don't edit old issue files. Write a new signal that supersedes the old issue:
+
+```markdown
+---
+date: 2026-03-16
+supersedes: issue-ci-slow
+---
+
+# CI pipeline optimized to 8 minutes
+
+Parallelized integration tests across 4 workers.
+```
 
 ## Content Guidelines
 

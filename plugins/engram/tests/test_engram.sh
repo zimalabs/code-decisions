@@ -836,7 +836,7 @@ EOF
   brief=$(cat "$dir/brief.md")
   assert_contains "brief has public title" "$brief" "Public architecture choice"
   assert_not_contains "brief excludes private title" "$brief" "Private deal terms"
-  assert_contains "brief shows private count" "$brief" "1 private signals (not shown)"
+  assert_contains "brief shows private count" "$brief" "1 private signal(s)"
 }
 
 test_private_queryable() {
@@ -1020,6 +1020,392 @@ EOF
   cd "$SCRIPT_DIR"
 }
 
+# ── Signal linking + richer brief tests ──────────────────────────────
+
+test_supersedes_frontmatter() {
+  echo "test_supersedes_frontmatter:"
+  local dir="$TEST_DIR/test-supersedes/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-old-auth.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+---
+
+# Use session-based auth
+
+Server-side sessions with cookies.
+EOF
+
+  cat > "$dir/signals/decision-new-auth.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+supersedes: decision-old-auth
+---
+
+# Use JWT authentication
+
+Mobile clients need token-based auth.
+EOF
+
+  engram_reindex "$dir"
+
+  # Check supersedes column
+  local supersedes_val
+  supersedes_val=$(sqlite3 "$dir/index.db" "SELECT supersedes FROM signals WHERE file_stem='decision-new-auth';")
+  assert_eq "supersedes column populated" "$supersedes_val" "decision-old-auth"
+
+  # Check links table
+  local link_count
+  link_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-new-auth' AND target_file='decision-old-auth' AND rel_type='supersedes';")
+  assert_eq "supersedes link in links table" "$link_count" "1"
+}
+
+test_links_frontmatter() {
+  echo "test_links_frontmatter:"
+  local dir="$TEST_DIR/test-links-fm/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+links: [related:finding-fts5-perf, blocks:issue-ci-timeout]
+---
+
+# Use Redis for caching
+
+Already in our stack.
+EOF
+
+  engram_reindex "$dir"
+
+  local related_count
+  related_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-use-redis' AND target_file='finding-fts5-perf' AND rel_type='related';")
+  assert_eq "related link exists" "$related_count" "1"
+
+  local blocks_count
+  blocks_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-use-redis' AND target_file='issue-ci-timeout' AND rel_type='blocks';")
+  assert_eq "blocks link exists" "$blocks_count" "1"
+
+  local total_links
+  total_links=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='decision-use-redis';")
+  assert_eq "2 links total" "$total_links" "2"
+}
+
+test_excerpt_extraction() {
+  echo "test_excerpt_extraction:"
+  local dir="$TEST_DIR/test-excerpt/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-test-excerpt.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Pick PostgreSQL
+
+Better JSON support and window functions.
+
+## Alternatives
+MySQL was considered.
+EOF
+
+  engram_reindex "$dir"
+
+  local excerpt
+  excerpt=$(sqlite3 "$dir/index.db" "SELECT excerpt FROM signals WHERE file_stem='decision-test-excerpt';")
+  assert_contains "excerpt has first body line" "$excerpt" "Better JSON support"
+}
+
+test_file_stem_column() {
+  echo "test_file_stem_column:"
+  local dir="$TEST_DIR/test-file-stem/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Use Redis
+
+Content.
+EOF
+
+  engram_reindex "$dir"
+
+  local stem
+  stem=$(sqlite3 "$dir/index.db" "SELECT file_stem FROM signals LIMIT 1;")
+  assert_eq "file_stem is basename without .md" "$stem" "decision-use-redis"
+}
+
+test_brief_hides_superseded() {
+  echo "test_brief_hides_superseded:"
+  local dir="$TEST_DIR/test-brief-superseded/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-old-cache.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+---
+
+# Use Memcached for caching
+
+Fast and simple.
+EOF
+
+  cat > "$dir/signals/decision-new-cache.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+supersedes: decision-old-cache
+---
+
+# Use Redis for caching
+
+Supports pub/sub which we need for notifications.
+EOF
+
+  engram_reindex "$dir"
+  engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_contains "brief shows new decision" "$brief" "Use Redis for caching"
+  assert_not_contains "brief hides superseded decision" "$brief" "Use Memcached"
+  assert_contains "brief shows superseded count" "$brief" "1 superseded"
+}
+
+test_brief_tag_grouping() {
+  echo "test_brief_tag_grouping:"
+  local dir="$TEST_DIR/test-brief-tags/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Create decisions with 3+ distinct primary tags
+  cat > "$dir/signals/decision-redis.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [infrastructure, caching]
+---
+
+# Use Redis
+
+For caching.
+EOF
+
+  cat > "$dir/signals/decision-jwt.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [auth, security]
+---
+
+# Use JWT
+
+For authentication.
+EOF
+
+  cat > "$dir/signals/decision-postgres.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+tags: [database, storage]
+---
+
+# Use PostgreSQL
+
+For persistence.
+EOF
+
+  engram_reindex "$dir"
+  engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_contains "brief has tag headers" "$brief" "###"
+}
+
+test_brief_excerpts() {
+  echo "test_brief_excerpts:"
+  local dir="$TEST_DIR/test-brief-excerpts/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-test-exc.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+---
+
+# Use Redis for caching
+
+Already in our stack for session storage.
+EOF
+
+  engram_reindex "$dir"
+  engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  # The dash separator before excerpt text
+  assert_contains "brief has excerpt" "$brief" "Already in our stack"
+}
+
+test_issue_status() {
+  echo "test_issue_status:"
+  local dir="$TEST_DIR/test-issue-status/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/issue-ci-slow.md" << 'EOF'
+---
+type: issue
+date: 2026-03-10
+---
+
+# CI is too slow
+
+Takes 45 minutes.
+EOF
+
+  cat > "$dir/signals/issue-ci-fixed.md" << 'EOF'
+---
+type: issue
+date: 2026-03-15
+status: resolved
+supersedes: issue-ci-slow
+---
+
+# CI optimized to 8 minutes
+
+Parallelized tests.
+EOF
+
+  engram_reindex "$dir"
+  engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_not_contains "superseded issue hidden" "$brief" "CI is too slow"
+  assert_contains "resolved count shown" "$brief" "resolved issue"
+}
+
+test_supersession_chain() {
+  echo "test_supersession_chain:"
+  local dir="$TEST_DIR/test-chain/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-auth-v1.md" << 'EOF'
+---
+type: decision
+date: 2026-03-01
+---
+
+# Auth v1: sessions
+
+Cookie-based sessions.
+EOF
+
+  cat > "$dir/signals/decision-auth-v2.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+supersedes: decision-auth-v1
+---
+
+# Auth v2: JWT
+
+Token-based auth.
+EOF
+
+  cat > "$dir/signals/decision-auth-v3.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+supersedes: decision-auth-v2
+---
+
+# Auth v3: OAuth2
+
+Delegated authentication.
+EOF
+
+  engram_reindex "$dir"
+
+  # Recursive CTE to walk the chain from v3 back to v1
+  local chain
+  chain=$(sqlite3 "$dir/index.db" "WITH RECURSIVE chain(stem, depth) AS (SELECT file_stem, 0 FROM signals WHERE file_stem = 'decision-auth-v3' UNION ALL SELECT s.supersedes, c.depth + 1 FROM chain c JOIN signals s ON s.file_stem = c.stem WHERE s.supersedes != '') SELECT s.title FROM chain c JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth;")
+  assert_contains "chain includes v3" "$chain" "Auth v3"
+  assert_contains "chain includes v2" "$chain" "Auth v2"
+  assert_contains "chain includes v1" "$chain" "Auth v1"
+}
+
+test_links_bidirectional() {
+  echo "test_links_bidirectional:"
+  local dir="$TEST_DIR/test-links-bidi/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
+---
+type: decision
+date: 2026-03-14
+links: [related:finding-redis-perf]
+---
+
+# Use Redis
+
+For caching.
+EOF
+
+  cat > "$dir/signals/finding-redis-perf.md" << 'EOF'
+---
+type: finding
+date: 2026-03-14
+---
+
+# Redis p99 latency is 2ms
+
+Very fast.
+EOF
+
+  engram_reindex "$dir"
+
+  # Query links from the finding's perspective (it's a target, not source)
+  local from_finding
+  from_finding=$(sqlite3 "$dir/index.db" "SELECT source_file FROM links WHERE target_file='finding-redis-perf';")
+  assert_eq "link findable from target side" "$from_finding" "decision-use-redis"
+
+  # Query links from the decision's perspective (it's the source)
+  local from_decision
+  from_decision=$(sqlite3 "$dir/index.db" "SELECT target_file FROM links WHERE source_file='decision-use-redis';")
+  assert_eq "link findable from source side" "$from_decision" "finding-redis-perf"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -1078,6 +1464,26 @@ echo ""
 test_uncommitted_summary_no_git
 echo ""
 test_session_end_output
+echo ""
+test_supersedes_frontmatter
+echo ""
+test_links_frontmatter
+echo ""
+test_excerpt_extraction
+echo ""
+test_file_stem_column
+echo ""
+test_brief_hides_superseded
+echo ""
+test_brief_tag_grouping
+echo ""
+test_brief_excerpts
+echo ""
+test_issue_status
+echo ""
+test_supersession_chain
+echo ""
+test_links_bidirectional
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

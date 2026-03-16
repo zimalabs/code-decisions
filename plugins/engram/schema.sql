@@ -12,7 +12,18 @@ CREATE TABLE IF NOT EXISTS signals (
     date TEXT NOT NULL DEFAULT (date('now')),
     file TEXT NOT NULL DEFAULT '',
     private INTEGER NOT NULL DEFAULT 0,
+    excerpt TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    supersedes TEXT NOT NULL DEFAULT '',
+    file_stem TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS links (
+    source_file TEXT NOT NULL,
+    target_file TEXT NOT NULL,
+    rel_type TEXT NOT NULL CHECK(rel_type IN ('supersedes','related','blocks','blocked-by')),
+    PRIMARY KEY (source_file, target_file, rel_type)
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS signals_fts USING fts5(

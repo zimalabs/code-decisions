@@ -30,7 +30,7 @@ plugins/engram/
     capture/SKILL.md      # Write signal files via Write tool
     query/SKILL.md        # SQL queries against index.db
   tests/
-    test_engram.sh        # 21 test groups
+    test_engram.sh        # 31 test groups
     run_tests.sh          # Test runner wrapper
 ```
 
@@ -62,13 +62,16 @@ engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brie
 ## Schema
 
 ```sql
-signals: id, type, title, content, tags, source, date, file, private, created_at
+signals: id, type, title, content, tags, source, date, file, private, excerpt, status, supersedes, file_stem, created_at
 signals_fts: FTS5 virtual table (title, content, tags) synced via triggers
+links: source_file, target_file, rel_type  (signal-to-signal relationships)
 meta: key, value  (stores ingestion cursors like last_commit)
 ```
 
 Types: `decision`, `finding`, `issue`
 Privacy: `private=0` (public), `private=1` (private)
+Status: `''` (default/open), `'resolved'`
+Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
 
 ## Adding a New Function
 

@@ -31,7 +31,7 @@ claude plugin install engram@zimalabs --scope project
 ### First session (greenfield or brownfield)
 
 SessionStart hook fires:
-1. Creates `.engram/{decisions,findings,issues}/` if missing
+1. Creates `.engram/signals/` and `.engram/_private/` if missing
 2. Ingests last 50 git commits as decision signals (brownfield bootstrap)
 3. Ingests any Claude plan files with `## Context` sections
 4. Builds `index.db` (derived SQLite index, git-ignored)
@@ -43,7 +43,7 @@ SessionStart hook fires:
 The agent works normally. When it makes a significant decision, it writes a signal file using the Write tool:
 
 ```markdown
-# .engram/decisions/2026-03-14-use-redis-for-caching.md
+# .engram/signals/decision-use-redis-for-caching.md
 ---
 date: 2026-03-14
 tags: [infrastructure, caching]
@@ -93,9 +93,11 @@ SessionStart hook catches ALL changes — commits from VS Code, terminal, CI, ot
 
 ## Signal Types
 
-Three types, each answering a different "why" question.
+Three types, each answering a different "why" question. All stored in `.engram/signals/` with type-prefixed filenames.
 
 ### Decision — Why we chose X
+
+File: `.engram/signals/decision-{slug}.md`
 
 ```markdown
 ---
@@ -120,6 +122,8 @@ Smaller ecosystem than Django. No built-in admin.
 
 ### Finding — Why we now know X
 
+File: `.engram/signals/finding-{slug}.md`
+
 ```markdown
 ---
 date: 2026-03-11
@@ -139,6 +143,8 @@ Every table with FTS needs explicit triggers in the schema.
 
 ### Issue — Why X needs attention
 
+File: `.engram/signals/issue-{slug}.md`
+
 ```markdown
 ---
 date: 2026-03-11
@@ -156,11 +162,70 @@ Developers avoid running full test suite locally.
 Investigate per-worker test databases.
 ```
 
+## Linking Signals
+
+Signals can reference each other via frontmatter. This enables supersession tracking (replacing outdated decisions) and relationship graphs.
+
+### Superseding a decision
+
+When a decision replaces an older one, use `supersedes:`:
+
+```markdown
+# .engram/signals/decision-use-jwt.md
+---
+date: 2026-03-15
+tags: [auth]
+supersedes: decision-use-sessions
+---
+
+# Use JWT authentication
+
+Mobile clients need token-based auth. Sessions don't work across native apps.
+```
+
+The superseded signal (`decision-use-sessions`) is hidden from the brief but remains queryable. The brief shows the new decision with a `(supersedes: decision-use-sessions)` annotation.
+
+### Linking related signals
+
+Use `links:` for non-supersession relationships:
+
+```markdown
+---
+date: 2026-03-15
+tags: [infrastructure]
+links: [related:finding-redis-latency, blocks:issue-notification-delay]
+---
+
+# Switch to Redis Cluster
+
+Single-node Redis can't handle our pub/sub volume.
+```
+
+Link types: `supersedes`, `related`, `blocks`, `blocked-by`.
+
+### Resolving issues
+
+Don't edit old issue files. Write a new signal that supersedes the original:
+
+```markdown
+# .engram/signals/decision-ci-optimized.md
+---
+date: 2026-03-16
+supersedes: issue-ci-slow
+---
+
+# CI pipeline optimized to 8 minutes
+
+Parallelized integration tests across 4 workers.
+```
+
+Issues with `status: resolved` or that have been superseded are counted but hidden from the brief.
+
 ## In a PR
 
 ```diff
-+ .engram/decisions/2026-03-14-use-redis-for-caching.md
-+ .engram/decisions/2026-03-14-jwt-over-sessions.md
++ .engram/signals/decision-use-redis-for-caching.md
++ .engram/signals/decision-jwt-over-sessions.md
   src/auth/middleware.py
   src/cache/redis_client.py
 ```
@@ -169,12 +234,12 @@ Reviewers see **why** alongside **what**. Decision reasoning is part of the code
 
 ## Private Signals
 
-For sensitive content that shouldn't be git-tracked or auto-sent to the Claude API, write to the `private/` subdirectory:
+For sensitive content that shouldn't be git-tracked or auto-sent to the Claude API, write to `.engram/_private/`:
 
 ```
-.engram/private/decisions/2026-03-14-competitor-deal.md
-.engram/private/findings/2026-03-14-customer-churn-data.md
-.engram/private/issues/2026-03-14-personnel-concern.md
+.engram/_private/decision-competitor-deal.md
+.engram/_private/finding-customer-churn-data.md
+.engram/_private/issue-personnel-concern.md
 ```
 
 Private signals are:
@@ -183,7 +248,7 @@ Private signals are:
 - **Indexed and queryable** — available on-demand via `@engram:query`
 - **Same schema** — identical format to public signals
 
-The directory path IS the privacy boundary. No config, no encryption. Move a file between `decisions/` and `private/decisions/` to change its visibility.
+The directory path IS the privacy boundary. No config, no encryption. Move a file between `signals/` and `_private/` to change its visibility.
 
 Use private for: messaging content, CRM data, competitive intel, personnel decisions — anything you wouldn't put in a commit message.
 
@@ -191,20 +256,19 @@ Use private for: messaging content, CRM data, competitive intel, personnel decis
 
 ```
 .engram/
-├── decisions/                    # git-tracked
-│   ├── 2026-03-10-use-fastapi.md
-│   └── 2026-03-12-jwt-auth.md
-├── findings/                     # git-tracked
-│   └── 2026-03-11-fts5-triggers.md
-├── issues/                       # git-tracked
-│   └── 2026-03-11-ci-too-slow.md
-├── private/                      # git-IGNORED
-│   ├── decisions/
-│   ├── findings/
-│   └── issues/
-├── brief.md                      # git-tracked
-└── index.db                      # git-IGNORED (derived)
+├── signals/                          # git-tracked
+│   ├── decision-use-fastapi.md
+│   ├── decision-jwt-auth.md
+│   ├── finding-fts5-triggers.md
+│   └── issue-ci-too-slow.md
+├── _private/                         # git-IGNORED
+│   ├── decision-competitor-deal.md
+│   └── finding-customer-churn.md
+├── brief.md                          # git-IGNORED (derived)
+└── index.db                          # git-IGNORED (derived)
 ```
+
+Filenames are type-prefixed: `decision-`, `finding-`, `issue-`. The filename stem (without `.md`) serves as a stable ID for linking between signals.
 
 Markdown files are the source of truth. `index.db` is derived — delete it anytime, rebuilt from files on next session.
 
@@ -242,7 +306,7 @@ They're complementary:
 - **CLAUDE.md** → "Use pytest for testing, prefer composition over inheritance"
 - **engram** → "Chose Redis over Memcached because we need pub/sub for notifications (2026-03-14)"
 
-CLAUDE.md doesn't grow. Engram does. After 50 sessions, your CLAUDE.md is the same 30 lines. Your `.engram/decisions/` has 50+ signals that prevent the agent from re-debating settled architecture choices.
+CLAUDE.md doesn't grow. Engram does. After 50 sessions, your CLAUDE.md is the same 30 lines. Your `.engram/signals/` has 50+ signals that prevent the agent from re-debating settled architecture choices.
 
 ### Does engram send my data anywhere?
 

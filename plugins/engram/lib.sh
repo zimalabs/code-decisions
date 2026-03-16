@@ -51,6 +51,24 @@ _slugify() {
     | cut -c1-50
 }
 
+# ── Signal helpers ───────────────────────────────────────────────────
+
+_file_stem() {
+  basename "$1" .md
+}
+
+_extract_excerpt() {
+  echo "$1" | grep -v '^$' | grep -v '^#' | head -1 | cut -c1-120
+}
+
+_parse_links() {
+  local str="$1"
+  str="${str#\[}"; str="${str%\]}"
+  echo "$str" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | while IFS=: read -r rel target; do
+    [ -n "$rel" ] && [ -n "$target" ] && printf '%s|%s\n' "$rel" "$target"
+  done
+}
+
 # ── Commit classification ────────────────────────────────────────────
 
 # Conventional commit prefixes that represent decisions
@@ -345,7 +363,7 @@ _index_file() {
 
   # Parse frontmatter
   local in_frontmatter=0
-  local fm_type="" fm_date="" fm_tags="[]" fm_source=""
+  local fm_type="" fm_date="" fm_tags="[]" fm_source="" fm_supersedes="" fm_status="" fm_links=""
   local body=""
   local title=""
   local past_frontmatter=0
@@ -363,10 +381,13 @@ _index_file() {
       fi
       if [ "$in_frontmatter" -eq 1 ]; then
         case "$line" in
-          type:*)   fm_type="${line#type:}"; fm_type="${fm_type# }";;
-          date:*)   fm_date="${line#date:}"; fm_date="${fm_date# }";;
-          source:*) fm_source="${line#source:}"; fm_source="${fm_source# }";;
-          tags:*)   fm_tags="${line#tags:}"; fm_tags="${fm_tags# }";;
+          type:*)       fm_type="${line#type:}"; fm_type="${fm_type# }";;
+          date:*)       fm_date="${line#date:}"; fm_date="${fm_date# }";;
+          source:*)     fm_source="${line#source:}"; fm_source="${fm_source# }";;
+          tags:*)       fm_tags="${line#tags:}"; fm_tags="${fm_tags# }";;
+          supersedes:*) fm_supersedes="${line#supersedes:}"; fm_supersedes="${fm_supersedes# }";;
+          status:*)     fm_status="${line#status:}"; fm_status="${fm_status# }";;
+          links:*)      fm_links="${line#links:}"; fm_links="${fm_links# }";;
         esac
         continue
       fi
@@ -397,18 +418,43 @@ _index_file() {
     esac
   fi
 
+  # Compute derived fields
+  local file_stem
+  file_stem=$(_file_stem "$filepath")
+  local excerpt
+  excerpt=$(_extract_excerpt "$body")
+
   # Combine title + body as content
   local content="$title"$'\n'"$body"
 
   # Use sed for SQL escaping (bash string replacement is unreliable with quotes)
-  local esc_title esc_content esc_tags esc_source esc_file
+  local esc_title esc_content esc_tags esc_source esc_file esc_excerpt esc_supersedes esc_status esc_file_stem
   esc_title=$(printf '%s' "$title" | sed "s/'/''/g")
   esc_content=$(printf '%s' "$content" | sed "s/'/''/g")
   esc_tags=$(printf '%s' "$fm_tags" | sed "s/'/''/g")
   esc_source=$(printf '%s' "$fm_source" | sed "s/'/''/g")
   esc_file=$(printf '%s' "$filepath" | sed "s/'/''/g")
+  esc_excerpt=$(printf '%s' "$excerpt" | sed "s/'/''/g")
+  esc_supersedes=$(printf '%s' "$fm_supersedes" | sed "s/'/''/g")
+  esc_status=$(printf '%s' "$fm_status" | sed "s/'/''/g")
+  esc_file_stem=$(printf '%s' "$file_stem" | sed "s/'/''/g")
 
-  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private);"
+  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, status, supersedes, file_stem) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_status', '$esc_supersedes', '$esc_file_stem');"
+
+  # Insert links
+  if [ -n "$fm_supersedes" ]; then
+    sqlite3 "$dir/index.db" "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES ('$esc_file_stem', '$esc_supersedes', 'supersedes');"
+  fi
+
+  if [ -n "$fm_links" ]; then
+    _parse_links "$fm_links" | while IFS='|' read -r rel target; do
+      [ -z "$rel" ] || [ -z "$target" ] && continue
+      local esc_rel esc_target
+      esc_rel=$(printf '%s' "$rel" | sed "s/'/''/g")
+      esc_target=$(printf '%s' "$target" | sed "s/'/''/g")
+      sqlite3 "$dir/index.db" "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES ('$esc_file_stem', '$esc_target', '$esc_rel');"
+    done
+  fi
 }
 
 # ── Brief generation ──────────────────────────────────────────────────
@@ -418,6 +464,31 @@ engram_brief() {
 
   [ -f "$dir/index.db" ] || return 0
 
+  # Build superseded set (file_stems that have been superseded by another signal)
+  local superseded_set
+  superseded_set=$(sqlite3 "$dir/index.db" "SELECT supersedes FROM signals WHERE supersedes != '' AND private=0;" 2>/dev/null || echo "")
+
+  # Build SQL IN clause for superseded stems
+  local superseded_in=""
+  if [ -n "$superseded_set" ]; then
+    local items=""
+    while IFS= read -r stem; do
+      [ -z "$stem" ] && continue
+      local esc_stem
+      esc_stem=$(printf '%s' "$stem" | sed "s/'/''/g")
+      [ -n "$items" ] && items="$items,"
+      items="$items'$esc_stem'"
+    done <<< "$superseded_set"
+    superseded_in="AND file_stem NOT IN ($items)"
+  fi
+
+  local superseded_count
+  if [ -n "$superseded_set" ]; then
+    superseded_count=$(echo "$superseded_set" | grep -c . || echo "0")
+  else
+    superseded_count=0
+  fi
+
   local decision_count finding_count issue_count
   decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0;" 2>/dev/null || echo "0")
   finding_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='finding' AND private=0;" 2>/dev/null || echo "0")
@@ -425,29 +496,67 @@ engram_brief() {
 
   local brief="# Decision Context ($decision_count decisions, $issue_count issues, $finding_count findings)"
 
-  local decisions
-  decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title FROM signals WHERE type='decision' AND private=0 ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
-  if [ -n "$decisions" ]; then
-    brief="$brief"$'\n\n'"## Recent Decisions"$'\n'"$decisions"
+  # ── Decisions: tag-grouped with excerpts, excluding superseded ──
+  local distinct_tags
+  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT CASE WHEN tags != '[]' AND tags != '' THEN REPLACE(REPLACE(SUBSTR(tags, 1, INSTR(tags||',', ',')-1), '[', ''), ']', '') ELSE NULL END) FROM signals WHERE type='decision' AND private=0 $superseded_in;" 2>/dev/null || echo "0")
+
+  if [ "$distinct_tags" -ge 3 ]; then
+    # Tag-grouped decisions
+    local tag_groups
+    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT REPLACE(REPLACE(SUBSTR(tags, 1, INSTR(tags||',', ',')-1), '[', ''), ']', '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
+    if [ -n "$tag_groups" ]; then
+      brief="$brief"$'\n\n'"## Recent Decisions"
+      while IFS='|' read -r tag entries; do
+        [ -z "$entries" ] && continue
+        if [ -n "$tag" ] && [ "$tag" != "[]" ]; then
+          brief="$brief"$'\n'"### $tag"$'\n'"$entries"
+        else
+          brief="$brief"$'\n'"$entries"
+        fi
+      done <<< "$tag_groups"
+    fi
+  else
+    # Chronological decisions with excerpts
+    local decisions
+    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END FROM signals WHERE type='decision' AND private=0 $superseded_in ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
+    if [ -n "$decisions" ]; then
+      brief="$brief"$'\n\n'"## Recent Decisions"$'\n'"$decisions"
+    fi
   fi
 
-  local issues
-  issues=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title FROM signals WHERE type='issue' AND private=0 ORDER BY date DESC LIMIT 10;" 2>/dev/null || echo "")
-  if [ -n "$issues" ]; then
-    brief="$brief"$'\n\n'"## Open Issues"$'\n'"$issues"
+  # ── Issues: split open/resolved ──
+  local open_issues
+  open_issues=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END FROM signals WHERE type='issue' AND private=0 AND status != 'resolved' $superseded_in ORDER BY date DESC LIMIT 10;" 2>/dev/null || echo "")
+  if [ -n "$open_issues" ]; then
+    brief="$brief"$'\n\n'"## Open Issues"$'\n'"$open_issues"
   fi
 
+  local resolved_count
+  resolved_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='issue' AND private=0 AND (status = 'resolved' OR (file_stem IN (SELECT supersedes FROM signals WHERE supersedes != '')));" 2>/dev/null || echo "0")
+  if [ "$resolved_count" -gt 0 ]; then
+    brief="$brief"$'\n'"*$resolved_count resolved issue(s) not shown*"
+  fi
+
+  # ── Findings: with excerpts, excluding superseded ──
   local findings
-  findings=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title FROM signals WHERE type='finding' AND private=0 ORDER BY date DESC LIMIT 10;" 2>/dev/null || echo "")
+  findings=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END FROM signals WHERE type='finding' AND private=0 $superseded_in ORDER BY date DESC LIMIT 10;" 2>/dev/null || echo "")
   if [ -n "$findings" ]; then
     brief="$brief"$'\n\n'"## Recent Findings"$'\n'"$findings"
   fi
 
-  # Show private signal count if any exist
+  # ── Footer ──
   local private_count
   private_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE private=1;" 2>/dev/null || echo "0")
+  local footer_parts=""
   if [ "$private_count" -gt 0 ]; then
-    brief="$brief"$'\n\n'"# + $private_count private signals (not shown)"
+    footer_parts="$private_count private signal(s)"
+  fi
+  if [ "$superseded_count" -gt 0 ]; then
+    [ -n "$footer_parts" ] && footer_parts="$footer_parts, "
+    footer_parts="${footer_parts}$superseded_count superseded signal(s)"
+  fi
+  if [ -n "$footer_parts" ]; then
+    brief="$brief"$'\n\n'"*+ $footer_parts not shown*"
   fi
 
   printf '%s\n' "$brief" > "$dir/brief.md"
