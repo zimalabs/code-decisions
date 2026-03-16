@@ -20,9 +20,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get install -y shellcheck
 
-      - name: Install ShellCheck (macOS)
+      - name: Install ShellCheck + SQLite with FTS5 (macOS)
         if: runner.os == 'macOS'
-        run: brew install shellcheck
+        run: |
+          brew install shellcheck sqlite
+          echo "$(brew --prefix sqlite)/bin" >> "$GITHUB_PATH"
 
       - name: Run checks
         run: make check
