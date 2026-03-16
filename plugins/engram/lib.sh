@@ -586,6 +586,15 @@ engram_brief() {
     brief="$brief"$'\n\n'"*+ $footer_parts not shown*"
   fi
 
+  # Cap brief size to stay within context budget (~2-4K tokens)
+  local max_lines="${ENGRAM_BRIEF_MAX_LINES:-50}"
+  local line_count
+  line_count=$(printf '%s\n' "$brief" | wc -l | tr -d ' ')
+  if [ "$line_count" -gt "$max_lines" ]; then
+    brief=$(printf '%s\n' "$brief" | head -n "$max_lines")
+    brief="$brief"$'\n\n'"*... truncated to $max_lines lines. Use @engram:query for full details.*"
+  fi
+
   printf '%s\n' "$brief" > "$dir/brief.md"
 }
 

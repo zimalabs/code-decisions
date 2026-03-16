@@ -1356,6 +1356,42 @@ EOF
   assert_contains "brief has tag headers" "$brief" "###"
 }
 
+test_brief_max_lines() {
+  echo "test_brief_max_lines:"
+  local dir="$TEST_DIR/test-brief-max-lines/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Create enough signals to exceed 10-line cap
+  for i in $(seq 1 20); do
+    cat > "$dir/signals/decision-bulk-$i.md" << EOF
+---
+type: decision
+date: 2026-03-14
+tags: [bulk]
+---
+
+# Bulk decision number $i
+
+Some explanation for decision $i with enough text to occupy space.
+EOF
+  done
+
+  engram_reindex "$dir"
+  ENGRAM_BRIEF_MAX_LINES=10 engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  local line_count
+  line_count=$(echo "$brief" | wc -l | tr -d ' ')
+  # 10 lines of content + 2 blank + 1 truncation note = 13 max
+  assert_contains "brief has truncation note" "$brief" "truncated to 10 lines"
+  # Without the cap the brief would be much larger; with cap it should be bounded
+  # The truncated brief should still have the header
+  assert_contains "brief has header" "$brief" "Decision Context"
+}
+
 test_brief_excerpts() {
   echo "test_brief_excerpts:"
   local dir="$TEST_DIR/test-brief-excerpts/.engram"
@@ -2010,6 +2046,8 @@ echo ""
 test_pre_compact_no_engram
 echo ""
 test_hooks_json_structure
+echo ""
+test_brief_max_lines
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
