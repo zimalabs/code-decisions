@@ -28,9 +28,9 @@ engram_init() {
   mkdir -p "$dir"/signals
   mkdir -p "$dir"/_private
   if [ ! -f "$dir/.gitignore" ]; then
-    printf 'index.db\nbrief.md\n_private/\n' > "$dir/.gitignore"
+    printf 'index.db\nbrief.md\nvisualize.html\n_private/\n' > "$dir/.gitignore"
   else
-    for entry in '_private/' 'brief.md'; do
+    for entry in '_private/' 'brief.md' 'visualize.html'; do
       grep -qx "$entry" "$dir/.gitignore" || echo "$entry" >> "$dir/.gitignore"
     done
   fi

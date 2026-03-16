@@ -154,6 +154,7 @@ test_init() {
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore contains index.db" "$gitignore" "index.db"
   assert_contains "gitignore contains brief.md" "$gitignore" "brief.md"
+  assert_contains "gitignore contains visualize.html" "$gitignore" "visualize.html"
   assert_contains "gitignore contains _private/" "$gitignore" "_private/"
 
   # Idempotent: run again, no error
@@ -186,6 +187,7 @@ test_init_upgrade_gitignore() {
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore has index.db" "$gitignore" "index.db"
   assert_contains "gitignore has brief.md" "$gitignore" "brief.md"
+  assert_contains "gitignore has visualize.html" "$gitignore" "visualize.html"
   assert_contains "gitignore has _private/" "$gitignore" "_private/"
 }
 
