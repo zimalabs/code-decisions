@@ -10,7 +10,7 @@ Engram is a local-only Claude Code plugin. It:
 
 ## Reporting a Vulnerability
 
-If you discover a security issue, email **security@zimalabs.com** with:
+If you discover a security issue, email **security@zimalabs.ai** with:
 - Description of the vulnerability
 - Steps to reproduce
 - Impact assessment
