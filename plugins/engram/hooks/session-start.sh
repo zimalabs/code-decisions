@@ -5,8 +5,8 @@ set -euo pipefail
 source "${CLAUDE_PLUGIN_ROOT}/lib.sh"
 ENGRAM_DIR=".engram"
 
-# Auto-init on first run
-[ -d "$ENGRAM_DIR" ] || engram_init "$ENGRAM_DIR"
+# Always init — idempotent, ensures new dirs exist on old installs
+engram_init "$ENGRAM_DIR"
 
 # ALWAYS re-ingest — catches commits from any source (VS Code, terminal, CI, other devs)
 engram_ingest_commits "$ENGRAM_DIR"

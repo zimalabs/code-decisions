@@ -153,6 +153,7 @@ test_init() {
   local gitignore
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore contains index.db" "$gitignore" "index.db"
+  assert_contains "gitignore contains brief.md" "$gitignore" "brief.md"
   assert_contains "gitignore contains _private/" "$gitignore" "_private/"
 
   # Idempotent: run again, no error
@@ -175,7 +176,7 @@ test_init_upgrade_gitignore() {
   local dir="$TEST_DIR/test-upgrade-gitignore/.engram"
 
   mkdir -p "$dir"
-  # Create old-style .gitignore without _private/
+  # Create old-style .gitignore without _private/ or brief.md
   echo "index.db" > "$dir/.gitignore"
 
   source "$LIB"
@@ -184,6 +185,7 @@ test_init_upgrade_gitignore() {
   local gitignore
   gitignore=$(cat "$dir/.gitignore")
   assert_contains "gitignore has index.db" "$gitignore" "index.db"
+  assert_contains "gitignore has brief.md" "$gitignore" "brief.md"
   assert_contains "gitignore has _private/" "$gitignore" "_private/"
 }
 

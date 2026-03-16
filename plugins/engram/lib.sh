@@ -28,9 +28,11 @@ engram_init() {
   mkdir -p "$dir"/signals
   mkdir -p "$dir"/_private
   if [ ! -f "$dir/.gitignore" ]; then
-    printf 'index.db\n_private/\n' > "$dir/.gitignore"
-  elif ! grep -qx '_private/' "$dir/.gitignore"; then
-    echo '_private/' >> "$dir/.gitignore"
+    printf 'index.db\nbrief.md\n_private/\n' > "$dir/.gitignore"
+  else
+    for entry in '_private/' 'brief.md'; do
+      grep -qx "$entry" "$dir/.gitignore" || echo "$entry" >> "$dir/.gitignore"
+    done
   fi
   if [ ! -f "$dir/index.db" ]; then
     sqlite3 "$dir/index.db" < "$ENGRAM_SCHEMA_FILE"
