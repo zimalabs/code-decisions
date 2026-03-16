@@ -22,6 +22,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review this session. If the agent made significant code changes (new features, architecture changes, refactors, dependency changes, non-trivial bug fixes) via Write or Edit tools, check whether at least one NEW .engram/signals/ file was also created via the Write tool during this session. Files inside .engram/ themselves don't count as code changes. Trivial changes (typo fixes, formatting, comment-only edits, test-only changes, documentation-only changes) are exempt. If significant code changes exist but no .engram/signals/ file was written, return 'block' with reason: 'Significant changes need a decision signal — use @engram:capture to write .engram/signals/decision-{slug}.md'. Otherwise return 'approve'."
+          }
+        ]
+      }
     ]
   }
 }
