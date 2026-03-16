@@ -1946,6 +1946,66 @@ test_hooks_json_structure() {
   assert_eq "PreCompact has command hook" "$compact_has_command" "1"
 }
 
+test_hooks_json_prompts() {
+  echo "--- test_hooks_json_prompts ---"
+  local hooks_file="$SCRIPT_DIR/../hooks/hooks.json"
+
+  # Extract all prompt hook texts
+  local prompts
+  prompts=$(jq -r '[.hooks[][] | .hooks[] | select(.type == "prompt") | .prompt] | .[]' "$hooks_file")
+
+  # 1. No prompt hook references systemMessage
+  if echo "$prompts" | grep -qi "systemMessage"; then
+    _fail "no systemMessage in prompt hooks" "found systemMessage reference"
+  else
+    _pass "no systemMessage in prompt hooks"
+  fi
+
+  # 2. No informal return language
+  if echo "$prompts" | grep -qi "return 'block'\|return 'approve'\|return 'allow'\|return 'deny'"; then
+    _fail "no informal return language" "found informal return language"
+  else
+    _pass "no informal return language"
+  fi
+
+  # 3. All prompt hooks reference "ok" field
+  local prompt_count
+  prompt_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt")] | length' "$hooks_file")
+  local ok_count
+  ok_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt | test("\"ok\"")))] | length' "$hooks_file")
+  assert_eq "all prompts reference ok field" "$ok_count" "$prompt_count"
+
+  # 4. All prompt hooks contain JSON instruction
+  local json_count
+  json_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt | test("MUST respond with.*JSON")))] | length' "$hooks_file")
+  assert_eq "all prompts have JSON instruction" "$json_count" "$prompt_count"
+
+  # 5. PostToolUse mentions SKILL.md
+  local post_prompt
+  post_prompt=$(jq -r '.hooks.PostToolUse[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
+  assert_contains "PostToolUse mentions SKILL.md" "$post_prompt" "SKILL.md"
+
+  # 6. PostToolUse never contains "ok": false (advisory only)
+  assert_not_contains "PostToolUse is advisory only" "$post_prompt" '"ok": false'
+
+  # 7. Stop prompt contains both ok:true and ok:false
+  local stop_prompt
+  stop_prompt=$(jq -r '.hooks.Stop[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
+  assert_contains "Stop has ok:true" "$stop_prompt" '"ok": true'
+  assert_contains "Stop has ok:false" "$stop_prompt" '"ok": false'
+
+  # 8. PreToolUse contains both ok:true and ok:false
+  local pre_prompt
+  pre_prompt=$(jq -r '.hooks.PreToolUse[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
+  assert_contains "PreToolUse has ok:true" "$pre_prompt" '"ok": true'
+  assert_contains "PreToolUse has ok:false" "$pre_prompt" '"ok": false'
+
+  # 9. PreCompact never contains "ok": false
+  local compact_prompt
+  compact_prompt=$(jq -r '.hooks.PreCompact[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
+  assert_not_contains "PreCompact never blocks" "$compact_prompt" '"ok": false'
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -2048,6 +2108,8 @@ echo ""
 test_pre_compact_no_engram
 echo ""
 test_hooks_json_structure
+echo ""
+test_hooks_json_prompts
 echo ""
 test_brief_max_lines
 
