@@ -64,7 +64,9 @@ Redis supports pub/sub which we'll need for the notification system.
 Higher memory usage than Memcached for pure cache workloads.
 ```
 
-No CLI. No skill invocation. Just write a file.
+No CLI needed. Just write a file — or use `@engram:capture` for guided signal creation with schema validation.
+
+If you write a signal manually with the same slug as a commit subject (e.g., `decision-use-redis-for-caching`), auto-ingest skips that commit. Manual signals are the primary record; auto-ingest is a safety net for decisions that weren't explicitly captured.
 
 When the agent needs past decisions:
 
@@ -284,6 +286,32 @@ Power users can pass raw SQL queries:
 @engram:query SELECT type, COUNT(*) as count FROM signals GROUP BY type
 @engram:query SELECT title, date FROM signals WHERE date >= '2026-03-01' ORDER BY date DESC
 ```
+
+## Skills
+
+| Skill | Purpose |
+|---|---|
+| `@engram:capture` | Guided signal creation — reads schemas, validates frontmatter, writes the file |
+| `@engram:query` | Query past signals in natural language or raw SQL (see [Querying](#querying)) |
+| `@engram:visualize` | Generate an interactive HTML dashboard — timeline, charts, link graph, searchable table |
+| `@engram:brief` | Regenerate and display the brief on demand — see updated context without restarting the session |
+| `@engram:reindex` | Rebuild `index.db` on demand after manual signal edits (no need to wait for next session) |
+| `@engram:introspect` | Interactive gap-filling loop — adds missing tags, links, body sections, and status to existing signals |
+
+## Automation
+
+Engram hooks run automatically — no configuration needed. Here's what happens behind the scenes:
+
+| Hook | Event | Behavior |
+|---|---|---|
+| **Stop enforcement** | Session end | Blocks if significant code changes lack a decision signal |
+| **PostToolUse nudge** | After Write/Edit | Advisory "consider recording this decision" (once per session) |
+| **Context injection** | After Write/Edit | Auto-injects related past decisions when editing code files |
+| **Signal validation** | Before Write/Edit | Validates frontmatter format on writes to `.engram/signals/` |
+| **Decision detection** | User prompt | Detects decision language ("let's go with…") and suggests capture |
+| **Compaction safety** | Before compaction | Warns about unrecorded decisions before context is compacted |
+
+All hooks are advisory or self-correcting — they guide the agent without interrupting your workflow.
 
 ## In a PR
 
