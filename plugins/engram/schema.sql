@@ -13,17 +13,14 @@ CREATE TABLE IF NOT EXISTS signals (
     file TEXT NOT NULL DEFAULT '',
     private INTEGER NOT NULL DEFAULT 0,
     excerpt TEXT NOT NULL DEFAULT '',
-    supersedes TEXT NOT NULL DEFAULT '',
-    file_stem TEXT NOT NULL DEFAULT '',
-    valid INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','withdrawn')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    slug TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','withdrawn','invalid'))
 );
 
 CREATE TABLE IF NOT EXISTS links (
     source_file TEXT NOT NULL,
     target_file TEXT NOT NULL,
-    rel_type TEXT NOT NULL CHECK(rel_type IN ('supersedes','related','blocks','blocked-by')),
+    rel_type TEXT NOT NULL CHECK(rel_type IN ('supersedes','related')),
     PRIMARY KEY (source_file, target_file, rel_type)
 );
 

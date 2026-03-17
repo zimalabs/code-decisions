@@ -66,7 +66,7 @@ engram_resync → engram_ingest_commits → engram_ingest_plans → engram_reind
 ## Schema
 
 ```sql
-signals: id, type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, valid, status, created_at
+signals: id, type, title, content, tags, source, date, file, private, excerpt, slug, status
 signals_fts: FTS5 virtual table (title, content, tags) synced via triggers
 links: source_file, target_file, rel_type  (decision-to-decision relationships)
 meta: key, value  (stores ingestion cursors like last_commit)
@@ -74,7 +74,8 @@ meta: key, value  (stores ingestion cursors like last_commit)
 
 Type: `decision`
 Privacy: `private=0` (public), `private=1` (private)
-Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
+Status: `active` (default), `withdrawn`, `invalid`
+Link rel_types: `supersedes`, `related`
 
 ## Adding a New Function
 

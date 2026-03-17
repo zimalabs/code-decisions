@@ -65,7 +65,7 @@ _slugify() {
 
 # ── Signal helpers ───────────────────────────────────────────────────
 
-_file_stem() {
+_slug() {
   basename "$1" .md
 }
 
@@ -537,31 +537,10 @@ _index_file() {
   [ -z "$type" ] && type="decision"
 
   # Compute derived fields
-  local file_stem
-  file_stem=$(_file_stem "$filepath")
+  local slug
+  slug=$(_slug "$filepath")
   local excerpt
   excerpt=$(_extract_excerpt "$body")
-
-  # Validate signal
-  local valid=1
-  if ! _validate_signal "$filepath" 2>/dev/null; then
-    valid=0
-    echo "engram: warning: $(basename "$filepath") is incomplete (missing rationale)" >&2
-  fi
-
-  # Combine title + body as content
-  local content="$title"$'\n'"$body"
-
-  # Use sed for SQL escaping (bash string replacement is unreliable with quotes)
-  local esc_title esc_content esc_tags esc_source esc_file esc_excerpt esc_supersedes esc_file_stem
-  esc_title=$(printf '%s' "$title" | sed "s/'/''/g")
-  esc_content=$(printf '%s' "$content" | sed "s/'/''/g")
-  esc_tags=$(printf '%s' "$fm_tags" | sed "s/'/''/g")
-  esc_source=$(printf '%s' "$fm_source" | sed "s/'/''/g")
-  esc_file=$(printf '%s' "$filepath" | sed "s/'/''/g")
-  esc_excerpt=$(printf '%s' "$excerpt" | sed "s/'/''/g")
-  esc_supersedes=$(printf '%s' "$fm_supersedes" | sed "s/'/''/g")
-  esc_file_stem=$(printf '%s' "$file_stem" | sed "s/'/''/g")
 
   # Normalize status (default to 'active' if unrecognized)
   case "$fm_status" in
@@ -569,11 +548,32 @@ _index_file() {
     *) fm_status="active" ;;
   esac
 
-  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, valid, status) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_supersedes', '$esc_file_stem', $valid, '$fm_status');"
+  # Validate signal — invalid overrides frontmatter status
+  if ! _validate_signal "$filepath" 2>/dev/null; then
+    fm_status="invalid"
+    echo "engram: warning: $(basename "$filepath") is incomplete (missing rationale)" >&2
+  fi
+
+  # Combine title + body as content
+  local content="$title"$'\n'"$body"
+
+  # Use sed for SQL escaping (bash string replacement is unreliable with quotes)
+  local esc_title esc_content esc_tags esc_source esc_file esc_excerpt esc_slug
+  esc_title=$(printf '%s' "$title" | sed "s/'/''/g")
+  esc_content=$(printf '%s' "$content" | sed "s/'/''/g")
+  esc_tags=$(printf '%s' "$fm_tags" | sed "s/'/''/g")
+  esc_source=$(printf '%s' "$fm_source" | sed "s/'/''/g")
+  esc_file=$(printf '%s' "$filepath" | sed "s/'/''/g")
+  esc_excerpt=$(printf '%s' "$excerpt" | sed "s/'/''/g")
+  esc_slug=$(printf '%s' "$slug" | sed "s/'/''/g")
+
+  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_slug', '$fm_status');"
 
   # Insert links
   if [ -n "$fm_supersedes" ]; then
-    sqlite3 "$dir/index.db" "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES ('$esc_file_stem', '$esc_supersedes', 'supersedes');"
+    local esc_supersedes
+    esc_supersedes=$(printf '%s' "$fm_supersedes" | sed "s/'/''/g")
+    sqlite3 "$dir/index.db" "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES ('$esc_slug', '$esc_supersedes', 'supersedes');"
   fi
 
   if [ -n "$fm_links" ]; then
@@ -582,7 +582,7 @@ _index_file() {
       local esc_rel esc_target
       esc_rel=$(printf '%s' "$rel" | sed "s/'/''/g")
       esc_target=$(printf '%s' "$target" | sed "s/'/''/g")
-      sqlite3 "$dir/index.db" "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES ('$esc_file_stem', '$esc_target', '$esc_rel');"
+      sqlite3 "$dir/index.db" "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES ('$esc_slug', '$esc_target', '$esc_rel');"
     done
   fi
 }
@@ -594,11 +594,11 @@ engram_brief() {
 
   [ -f "$dir/index.db" ] || return 0
 
-  # Build superseded set (file_stems that have been superseded by another signal)
+  # Build superseded set (slugs that have been superseded by another signal)
   local superseded_set
-  superseded_set=$(sqlite3 "$dir/index.db" "SELECT supersedes FROM signals WHERE supersedes != '' AND private=0;" 2>/dev/null || echo "")
+  superseded_set=$(sqlite3 "$dir/index.db" "SELECT target_file FROM links WHERE rel_type='supersedes';" 2>/dev/null || echo "")
 
-  # Build SQL IN clause for superseded stems
+  # Build SQL IN clause for superseded slugs
   local superseded_in=""
   if [ -n "$superseded_set" ]; then
     local items=""
@@ -609,7 +609,7 @@ engram_brief() {
       [ -n "$items" ] && items="$items,"
       items="$items'$esc_stem'"
     done <<< "$superseded_set"
-    superseded_in="AND file_stem NOT IN ($items)"
+    superseded_in="AND slug NOT IN ($items)"
   fi
 
   local superseded_count
@@ -620,10 +620,10 @@ engram_brief() {
   fi
 
   local decision_count
-  decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=1 AND status='active';" 2>/dev/null || echo "0")
+  decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='active';" 2>/dev/null || echo "0")
 
   local invalid_count
-  invalid_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=0;" 2>/dev/null || echo "0")
+  invalid_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='invalid';" 2>/dev/null || echo "0")
 
   local withdrawn_count
   withdrawn_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn';" 2>/dev/null || echo "0")
@@ -632,12 +632,12 @@ engram_brief() {
 
   # ── Decisions: tag-grouped with excerpts, excluding superseded ──
   local distinct_tags
-  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.valid=1 AND signals.status='active' AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
+  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.status='active' AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
 
   if [ "$distinct_tags" -ge 3 ]; then
     # Tag-grouped decisions
     local tag_groups
-    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 AND valid=1 AND status='active' $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
+    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(s.tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || s.date || '] ' || s.title || CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END, CHAR(10)) FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' WHERE s.type='decision' AND s.private=0 AND s.status='active' $superseded_in GROUP BY primary_tag ORDER BY MAX(s.date) DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$tag_groups" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"
       while IFS='|' read -r tag entries; do
@@ -652,7 +652,7 @@ engram_brief() {
   else
     # Chronological decisions with excerpts
     local decisions
-    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END FROM signals WHERE type='decision' AND private=0 AND valid=1 AND status='active' $superseded_in ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
+    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || s.date || '] ' || s.title || CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' WHERE s.type='decision' AND s.private=0 AND s.status='active' $superseded_in ORDER BY s.date DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$decisions" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"$'\n'"$decisions"
     fi
@@ -744,7 +744,7 @@ engram_query_relevant() {
 
   # Exclude private and superseded signals
   local results
-  results=$(sqlite3 -separator '|' "$dir/index.db" "SELECT s.date, s.title, s.excerpt FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH '$fts_query' AND s.private = 0 AND s.status = 'active' AND s.file_stem NOT IN (SELECT supersedes FROM signals WHERE supersedes != '') ORDER BY rank LIMIT $limit;" 2>/dev/null || echo "")
+  results=$(sqlite3 -separator '|' "$dir/index.db" "SELECT s.date, s.title, s.excerpt FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH '$fts_query' AND s.private = 0 AND s.status = 'active' AND s.slug NOT IN (SELECT target_file FROM links WHERE rel_type = 'supersedes') ORDER BY rank LIMIT $limit;" 2>/dev/null || echo "")
 
   [ -z "$results" ] && return 0
 
@@ -801,20 +801,20 @@ engram_find_incomplete() {
   [ -f "$dir/index.db" ] || return 0
 
   # Find signals with gaps: missing tags, missing body sections, or no links.
-  # Output: file_stem|title|gap_types (pipe-delimited, one per line)
+  # Output: slug|title|gap_types (pipe-delimited, one per line)
   sqlite3 -separator '|' "$dir/index.db" "
-    SELECT s.file_stem, s.title,
+    SELECT s.slug, s.title,
       CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END
       || CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END
       || CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END
       AS gap_types
     FROM signals s
-    LEFT JOIN links l ON l.source_file = s.file_stem
-    LEFT JOIN links l2 ON l2.target_file = s.file_stem
+    LEFT JOIN links l ON l.source_file = s.slug
+    LEFT JOIN links l2 ON l2.target_file = s.slug
     WHERE (s.tags = '[]' OR s.tags = ''
       OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%')
       OR (l.source_file IS NULL AND l2.target_file IS NULL))
-    GROUP BY s.file_stem
+    GROUP BY s.slug
     ORDER BY s.date DESC
     LIMIT $limit;
   " 2>/dev/null | while IFS='|' read -r stem title gaps; do

@@ -61,6 +61,8 @@ links: [related:redis-cluster]
 - **supersedes** — this decision replaces the target (target hidden from brief)
 - **related** — informational connection
 
+Only `supersedes` and `related` are supported.
+
 ## Retiring Signals
 
 To mark a decision as no longer relevant without deleting it, add `status: withdrawn` to its frontmatter:

@@ -16,11 +16,11 @@ recent=$(find "$ENGRAM_DIR/decisions" -name '*.md' -newer "$ENGRAM_DIR/index.db"
 
 # If there are recent signals, check if any are incomplete before approving
 if [ "$recent" -gt 0 ]; then
-  # Check for incomplete signals (valid=0) — nudge toward backfill
+  # Check for incomplete signals (status='invalid') — nudge toward backfill
   if [ -f "$ENGRAM_DIR/index.db" ]; then
     backfill_marker="/tmp/engram-backfill-nudge-${CLAUDE_SESSION_ID:-$$}"
     if [ ! -f "$backfill_marker" ]; then
-      invalid_count=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE valid=0;" 2>/dev/null || echo "0")
+      invalid_count=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE status='invalid';" 2>/dev/null || echo "0")
       if [ "$invalid_count" -gt 0 ]; then
         touch "$backfill_marker"
         printf '{"ok": true, "reason": "%d incomplete signal(s) — consider @engram:backfill to enrich them."}\n' "$invalid_count"

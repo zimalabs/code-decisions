@@ -14,8 +14,8 @@ if [ -f "$session_file" ]; then
   exit 0
 fi
 
-# Check for incomplete signals (valid=0)
-invalid_count=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE valid=0;" 2>/dev/null || echo "0")
+# Check for incomplete signals (status='invalid')
+invalid_count=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE status='invalid';" 2>/dev/null || echo "0")
 
 if [ "$invalid_count" -gt 0 ]; then
   touch "$session_file"

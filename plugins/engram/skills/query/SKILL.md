@@ -70,31 +70,33 @@ SELECT id, title, date FROM signals WHERE status='withdrawn' ORDER BY date DESC
 
 -- Active decisions only (default in brief/context)
 SELECT id, title, date FROM signals WHERE status='active' ORDER BY date DESC
+
+-- Invalid decisions (missing required fields like tags or rationale)
+SELECT id, title, date FROM signals WHERE status='invalid' ORDER BY date DESC
 ```
 
 ## Link-Aware Patterns
 
 ```sql
 -- What superseded a decision?
-SELECT file_stem, title, date FROM signals WHERE supersedes = 'old-slug'
+SELECT l.source_file, s.title, s.date FROM links l JOIN signals s ON s.slug = l.source_file WHERE l.target_file = 'old-slug' AND l.rel_type = 'supersedes'
 
 -- Full supersession chain (walk backwards from current)
 WITH RECURSIVE chain(stem, depth) AS (
-  SELECT file_stem, 0 FROM signals WHERE file_stem = 'current'
+  SELECT 'current', 0
   UNION ALL
-  SELECT s.supersedes, c.depth + 1
-  FROM chain c JOIN signals s ON s.file_stem = c.stem
-  WHERE s.supersedes != ''
+  SELECT l.target_file, c.depth + 1
+  FROM chain c JOIN links l ON l.source_file = c.stem AND l.rel_type = 'supersedes'
 )
 SELECT s.title, s.date, c.depth FROM chain c
-JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth
+JOIN signals s ON s.slug = c.stem ORDER BY c.depth
 
 -- All decisions linked to X (via links table)
-SELECT DISTINCT s.file_stem, s.title, l.rel_type
+SELECT DISTINCT s.slug, s.title, l.rel_type
 FROM links l JOIN signals s
-ON s.file_stem = l.source_file OR s.file_stem = l.target_file
+ON s.slug = l.source_file OR s.slug = l.target_file
 WHERE (l.source_file = 'x' OR l.target_file = 'x')
-AND s.file_stem != 'x'
+AND s.slug != 'x'
 ```
 
 ## Schema Reference
@@ -103,14 +105,15 @@ SQL tables:
 
 ```
 signals: id, type, title, content, tags (JSON array), source, date, file, private,
-         excerpt, supersedes, file_stem, valid, status, created_at
+         excerpt, slug, status
 links: source_file, target_file, rel_type
 meta: key, value
 ```
 
 Type: `decision`
 Privacy: `private=0` (public, in decisions/), `private=1` (private, in _private/decisions/)
-Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
+Status: `active` (default), `withdrawn`, `invalid`
+Link rel_types: `supersedes`, `related`
 
 For signal file schema (frontmatter fields, body sections, link types), see `${CLAUDE_PLUGIN_ROOT}/schemas/`.
 

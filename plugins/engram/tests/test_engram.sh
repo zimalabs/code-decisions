@@ -1090,12 +1090,7 @@ EOF
 
   engram_reindex "$dir"
 
-  # Check supersedes column
-  local supersedes_val
-  supersedes_val=$(sqlite3 "$dir/index.db" "SELECT supersedes FROM signals WHERE file_stem='new-auth';")
-  assert_eq "supersedes column populated" "$supersedes_val" "old-auth"
-
-  # Check links table
+  # Check links table (supersedes is only in links, not a column)
   local link_count
   link_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='new-auth' AND target_file='old-auth' AND rel_type='supersedes';")
   assert_eq "supersedes link in links table" "$link_count" "1"
@@ -1112,7 +1107,7 @@ test_links_frontmatter() {
 ---
 type: decision
 date: 2026-03-14
-links: [related:fts5-perf, blocks:ci-timeout]
+links: [related:fts5-perf, related:ci-timeout]
 ---
 
 # Use Redis for caching
@@ -1125,10 +1120,6 @@ EOF
   local related_count
   related_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='use-redis' AND target_file='fts5-perf' AND rel_type='related';")
   assert_eq "related link exists" "$related_count" "1"
-
-  local blocks_count
-  blocks_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='use-redis' AND target_file='ci-timeout' AND rel_type='blocks';")
-  assert_eq "blocks link exists" "$blocks_count" "1"
 
   local total_links
   total_links=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM links WHERE source_file='use-redis';")
@@ -1159,13 +1150,13 @@ EOF
   engram_reindex "$dir"
 
   local excerpt
-  excerpt=$(sqlite3 "$dir/index.db" "SELECT excerpt FROM signals WHERE file_stem='test-excerpt';")
+  excerpt=$(sqlite3 "$dir/index.db" "SELECT excerpt FROM signals WHERE slug='test-excerpt';")
   assert_contains "excerpt has first body line" "$excerpt" "Better JSON support"
 }
 
-test_file_stem_column() {
-  echo "test_file_stem_column:"
-  local dir="$TEST_DIR/test-file-stem/.engram"
+test_slug_column() {
+  echo "test_slug_column:"
+  local dir="$TEST_DIR/test-slug/.engram"
 
   source "$LIB"
   engram_init "$dir"
@@ -1183,9 +1174,9 @@ EOF
 
   engram_reindex "$dir"
 
-  local stem
-  stem=$(sqlite3 "$dir/index.db" "SELECT file_stem FROM signals LIMIT 1;")
-  assert_eq "file_stem is basename without .md" "$stem" "use-redis"
+  local slug_val
+  slug_val=$(sqlite3 "$dir/index.db" "SELECT slug FROM signals LIMIT 1;")
+  assert_eq "slug is basename without .md" "$slug_val" "use-redis"
 }
 
 test_brief_hides_superseded() {
@@ -1391,9 +1382,9 @@ EOF
 
   engram_reindex "$dir"
 
-  # Recursive CTE to walk the chain from v3 back to v1
+  # Recursive CTE to walk the chain from v3 back to v1 via links table
   local chain
-  chain=$(sqlite3 "$dir/index.db" "WITH RECURSIVE chain(stem, depth) AS (SELECT file_stem, 0 FROM signals WHERE file_stem = 'auth-v3' UNION ALL SELECT s.supersedes, c.depth + 1 FROM chain c JOIN signals s ON s.file_stem = c.stem WHERE s.supersedes != '') SELECT s.title FROM chain c JOIN signals s ON s.file_stem = c.stem ORDER BY c.depth;")
+  chain=$(sqlite3 "$dir/index.db" "WITH RECURSIVE chain(stem, depth) AS (SELECT 'auth-v3', 0 UNION ALL SELECT l.target_file, c.depth + 1 FROM chain c JOIN links l ON l.source_file = c.stem AND l.rel_type = 'supersedes') SELECT s.title FROM chain c JOIN signals s ON s.slug = c.stem ORDER BY c.depth;")
   assert_contains "chain includes v3" "$chain" "Auth v3"
   assert_contains "chain includes v2" "$chain" "Auth v2"
   assert_contains "chain includes v1" "$chain" "Auth v1"
@@ -1480,33 +1471,36 @@ test_query_relevant() {
 ---
 type: decision
 date: 2026-03-14
+tags: [infrastructure]
 ---
 
 # Use Redis for caching
 
-Already in our stack for session storage.
+Already in our stack for session storage and pub/sub needs.
 EOF
 
   cat > "$dir/decisions/jwt-auth.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
+tags: [auth]
 ---
 
 # Use JWT for authentication
 
-Token-based auth for mobile clients.
+Token-based auth for mobile clients that need stateless sessions.
 EOF
 
   cat > "$dir/_private/decisions/secret.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
+tags: [caching]
 ---
 
 # Secret caching strategy
 
-Private info about caching.
+Private info about caching that should not be visible in queries.
 EOF
 
   engram_reindex "$dir"
@@ -1547,23 +1541,25 @@ test_query_relevant_excludes_superseded() {
 ---
 type: decision
 date: 2026-03-10
+tags: [infrastructure]
 ---
 
 # Use Memcached for caching
 
-Fast and simple.
+Fast and simple key-value store for basic caching needs.
 EOF
 
   cat > "$dir/decisions/new-cache.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-15
+tags: [infrastructure]
 supersedes: old-cache
 ---
 
 # Use Redis for caching
 
-Supports pub/sub.
+Supports pub/sub which we need for real-time notifications.
 EOF
 
   engram_reindex "$dir"
@@ -2084,13 +2080,13 @@ EOF
 
   engram_reindex "$dir" 2>/dev/null
 
-  local valid_good
-  valid_good=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='good';")
-  assert_eq "good signal is valid=1" "$valid_good" "1"
+  local status_good
+  status_good=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE slug='good';")
+  assert_eq "good signal is active" "$status_good" "active"
 
-  local valid_bad
-  valid_bad=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE file_stem='bad';")
-  assert_eq "bad signal is valid=0" "$valid_bad" "0"
+  local status_bad
+  status_bad=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE slug='bad';")
+  assert_eq "bad signal is invalid" "$status_bad" "invalid"
 }
 
 test_brief_excludes_invalid() {
@@ -2158,9 +2154,9 @@ test_ingest_bodyless_commit_invalid() {
   engram_reindex "$dir" 2>/dev/null
 
   # Auto-ingested commit without body should be invalid (no tags, short/missing lead paragraph)
-  local valid_val
-  valid_val=$(sqlite3 "$dir/index.db" "SELECT valid FROM signals WHERE source LIKE 'git:%' LIMIT 1;" 2>/dev/null || echo "")
-  assert_eq "bodyless commit is valid=0" "$valid_val" "0"
+  local status_val
+  status_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE source LIKE 'git:%' LIMIT 1;" 2>/dev/null || echo "")
+  assert_eq "bodyless commit is invalid" "$status_val" "invalid"
 
   # Should be excluded from brief
   engram_brief "$dir"
@@ -2434,11 +2430,11 @@ EOF
 
   # Verify source field is queryable for classification
   local agent_source
-  agent_source=$(sqlite3 "$dir/index.db" "SELECT source FROM signals WHERE file_stem='agent-written';")
+  agent_source=$(sqlite3 "$dir/index.db" "SELECT source FROM signals WHERE slug='agent-written';")
   assert_eq "agent-written has empty source" "$agent_source" ""
 
   local git_source
-  git_source=$(sqlite3 "$dir/index.db" "SELECT source FROM signals WHERE file_stem='auto-ingested';")
+  git_source=$(sqlite3 "$dir/index.db" "SELECT source FROM signals WHERE slug='auto-ingested';")
   assert_contains "auto-ingested has git source" "$git_source" "git:"
 }
 
@@ -2524,7 +2520,7 @@ EOF
   engram_reindex "$dir"
 
   local status_val
-  status_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE file_stem='old-feature';")
+  status_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE slug='old-feature';")
   assert_eq "status column stores withdrawn" "$status_val" "withdrawn"
 
   # Default status should be active
@@ -2543,7 +2539,7 @@ EOF
   engram_reindex "$dir"
 
   local active_val
-  active_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE file_stem='active-feature';")
+  active_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE slug='active-feature';")
   assert_eq "status defaults to active" "$active_val" "active"
 }
 
@@ -2694,7 +2690,7 @@ test_links_frontmatter
 echo ""
 test_excerpt_extraction
 echo ""
-test_file_stem_column
+test_slug_column
 echo ""
 test_brief_hides_superseded
 echo ""

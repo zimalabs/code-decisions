@@ -10,7 +10,7 @@ File: `.engram/decisions/{slug}.md`
 | `tags` | yes | Bracket list with at least one tag: `[topic1, topic2]` |
 | `source` | no | Origin: `plan:<file>` (auto-set), `git:<hash>` (when git tracking enabled) |
 | `supersedes` | no | File stem of the signal this replaces |
-| `links` | no | Bracket list: `[related:stem, blocks:stem]` |
+| `links` | no | Bracket list: `[related:stem]` |
 | `status` | no | Lifecycle status: `active` (default) or `withdrawn` |
 
 ## Template
@@ -20,7 +20,7 @@ File: `.engram/decisions/{slug}.md`
 date: YYYY-MM-DD
 tags: [topic1, topic2]
 supersedes: old-slug    # optional: replaces a prior decision
-links: [related:some-x]          # optional: related, blocks, blocked-by
+links: [related:some-x]          # optional: related
 status: active          # optional: active (default) or withdrawn
 ---
 
@@ -48,7 +48,7 @@ What we gave up or risk by choosing this.
 
 ## Validation Rules
 
-Signals are validated at index time. Invalid signals are indexed with `valid=0` and excluded from the brief.
+Signals are validated at index time. Invalid signals are indexed with `status='invalid'` and excluded from the brief.
 
 1. **Frontmatter** — must open and close with `---`
 2. **date:** — required, ISO format (YYYY-MM-DD)
