@@ -15,10 +15,10 @@ All decision signals support these fields:
 | Field | Required | Format | Description |
 |---|---|---|---|
 | `date` | yes | `YYYY-MM-DD` | When the signal was created |
-| `tags` | no | `[tag1, tag2]` | Categorization tags; first tag = primary tag |
-| `source` | no | `git:<hash>` or `plan:<file>` | Auto-set by hooks during ingestion |
-| `supersedes` | no | `{slug}` | File stem of the decision this replaces |
-| `links` | no | `[rel:stem, rel:stem]` | Relationships to other decisions |
+| `tags` | no | `["tag1", "tag2"]` | TOML array; first tag = primary tag |
+| `source` | no | `"git:<hash>"` or `"plan:<file>"` | Auto-set by hooks during ingestion |
+| `supersedes` | no | `"slug"` | File stem of the decision this replaces |
+| `links` | no | `["rel:stem"]` | TOML array of relationships |
 
 ## Link Types
 
@@ -40,4 +40,4 @@ The directory path determines privacy. Schema is identical in both directories.
 
 `{slug}.md` where slug is lowercase, hyphen-separated, max 50 chars.
 
-The filename stem (without `.md`) is the stable ID used in `supersedes:` and `links:` fields.
+The filename stem (without `.md`) is the stable ID used in `supersedes` and `links` fields.

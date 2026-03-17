@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from ._constants import StrPath
-from ._frontmatter import _FM_FIELDS, _split_frontmatter
+from ._frontmatter import _split_frontmatter
 from ._helpers import _parse_links
 
 
@@ -26,24 +26,9 @@ class Signal:
 
     @classmethod
     def from_text(cls, text: str) -> Signal:
-        """Parse markdown with YAML frontmatter into a Signal."""
-        meta: dict[str, str] = {
-            "type": "",
-            "date": "",
-            "tags": "[]",
-            "source": "",
-            "supersedes": "",
-            "links": "",
-            "status": "active",
-        }
-
-        fm_lines, content_lines = _split_frontmatter(text)
-        has_fm = bool(fm_lines) or text.splitlines()[:1] == ["---"]
-
-        for line in fm_lines:
-            key, _, val = line.partition(":")
-            if key in _FM_FIELDS:
-                meta[key] = _FM_FIELDS[key](val)
+        """Parse markdown with TOML frontmatter into a Signal."""
+        fm, content_lines = _split_frontmatter(text)
+        has_fm = bool(fm) or text.splitlines()[:1] == ["+++"]
 
         title = ""
         body_lines = []
@@ -60,13 +45,13 @@ class Signal:
         return cls(
             title=title,
             body=body,
-            sig_type=meta["type"] or "decision",
-            date=meta["date"],
-            tags=meta["tags"],
-            source=meta["source"],
-            supersedes=meta["supersedes"],
-            links=meta["links"],
-            status=meta["status"],
+            sig_type="decision",
+            date=fm.get("date", ""),
+            tags=fm.get("tags", "[]"),
+            source=fm.get("source", ""),
+            supersedes=fm.get("supersedes", ""),
+            links=fm.get("links", ""),
+            status=fm.get("status", "active"),
             _has_frontmatter=has_fm,
         )
 
@@ -94,7 +79,7 @@ class Signal:
         errors = []
 
         if not self._has_frontmatter:
-            errors.append("missing frontmatter delimiters (---)")
+            errors.append("missing frontmatter delimiters (+++)")
         else:
             # Check date
             if not self.date or not re.match(r"^\d{4}-\d{2}-\d{2}$", self.date):

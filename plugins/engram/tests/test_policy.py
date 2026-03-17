@@ -88,11 +88,10 @@ def _write_signal(engram_dir, slug="test-decision", private=False):
         target = engram_dir / "decisions" / f"{slug}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        "---\n"
-        "type: decision\n"
-        "date: 2026-03-17\n"
-        "tags: [testing]\n"
-        "---\n\n"
+        "+++\n"
+        "date = 2026-03-17\n"
+        "tags = [\"testing\"]\n"
+        "+++\n\n"
         f"# {slug}\n\n"
         "This is a test decision with sufficient rationale for validation.\n"
     )
@@ -403,7 +402,7 @@ def test_content_validation_accepts_valid():
         "tool_input": {
             "file_path": ".engram/decisions/good.md",
             "content": (
-                "---\ntype: decision\ndate: 2026-03-17\ntags: [testing]\n---\n\n"
+                "+++\ndate = 2026-03-17\ntags = [\"testing\"]\n+++\n\n"
                 "# Good Decision\n\nThis is a valid decision with sufficient rationale.\n"
             ),
         }

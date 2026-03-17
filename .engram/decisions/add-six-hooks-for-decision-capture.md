@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-16
-tags: [hooks, decision-capture, plugin-api]
----
++++
+date = 2026-03-16
+tags = ["hooks", "decision-capture", "plugin-api"]
++++
 
 # Add 6 new hooks for in-the-moment decision capture
 

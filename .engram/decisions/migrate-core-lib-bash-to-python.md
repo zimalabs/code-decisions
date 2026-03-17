@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-17
-tags: [architecture, migration]
----
++++
+date = 2026-03-17
+tags = ["architecture", "migration"]
++++
 
 # Migrate engram core library from bash to Python
 

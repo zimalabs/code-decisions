@@ -1,9 +1,8 @@
----
-type: decision
-date: 2026-03-16
-tags: [schema, sqlite, tags]
-links: [related:enforce-decision-structure-with-mandatory-why]
----
++++
+date = 2026-03-16
+tags = ["schema", "sqlite", "tags"]
+links = ["related:enforce-decision-structure-with-mandatory-why"]
++++
 
 # Store tags as valid JSON in index.db
 

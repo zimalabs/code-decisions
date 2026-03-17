@@ -1,10 +1,9 @@
----
-type: decision
-date: 2026-03-16
-tags: [cleanup, signals]
-links: [related:reorganize-repo-to-plugin-marketplace-structure]
-source: git:8f257cf81f767446715d55c670c2f316a8794274
----
++++
+date = 2026-03-16
+tags = ["cleanup", "signals"]
+links = ["related:reorganize-repo-to-plugin-marketplace-structure"]
+source = "git:8f257cf81f767446715d55c670c2f316a8794274"
++++
 
 # Remove old .engram/decisions/ files left over from directory flattening
 

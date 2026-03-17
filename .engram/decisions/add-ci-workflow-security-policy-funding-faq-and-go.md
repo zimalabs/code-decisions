@@ -1,10 +1,9 @@
----
-type: decision
-date: 2026-03-16
-tags: [ci, launch, docs]
-links: [related:fix-ci-install-homebrew-sqlite-with-fts5-on-macos, related:remove-good-first-issues-md-from-repo]
-source: git:168b6a3eef1ee4dbf69bdecbdb1bcee8e66c4589
----
++++
+date = 2026-03-16
+tags = ["ci", "launch", "docs"]
+links = ["related:fix-ci-install-homebrew-sqlite-with-fts5-on-macos", "related:remove-good-first-issues-md-from-repo"]
+source = "git:168b6a3eef1ee4dbf69bdecbdb1bcee8e66c4589"
++++
 
 # Add CI workflow, security policy, funding, FAQ, and good-first-issues
 

@@ -6,23 +6,23 @@ File: `.engram/decisions/{slug}.md`
 
 | Field | Required | Description |
 |---|---|---|
-| `date` | yes | ISO date (YYYY-MM-DD) |
-| `tags` | yes | Bracket list with at least one tag: `[topic1, topic2]` |
+| `date` | yes | ISO date (YYYY-MM-DD) — parsed as TOML date |
+| `tags` | yes | TOML array with at least one tag: `["topic1", "topic2"]` |
 | `source` | no | Origin: `plan:<file>` (auto-set), `git:<hash>` (when git tracking enabled) |
 | `supersedes` | no | File stem of the signal this replaces |
-| `links` | no | Bracket list: `[related:stem]` |
+| `links` | no | TOML array: `["related:stem"]` |
 | `status` | no | Lifecycle status: `active` (default) or `withdrawn` |
 
 ## Template
 
 ```markdown
----
-date: YYYY-MM-DD
-tags: [topic1, topic2]
-supersedes: old-slug    # optional: replaces a prior decision
-links: [related:some-x]          # optional: related
-status: active          # optional: active (default) or withdrawn
----
++++
+date = YYYY-MM-DD
+tags = ["topic1", "topic2"]
+supersedes = "old-slug"    # optional: replaces a prior decision
+links = ["related:some-x"]          # optional: related
+status = "active"          # optional: active (default) or withdrawn
++++
 
 # Title of the decision
 
@@ -50,8 +50,8 @@ What we gave up or risk by choosing this.
 
 Signals are validated at index time. Invalid signals are indexed with `status='invalid'` and excluded from the brief.
 
-1. **Frontmatter** — must open and close with `---`
-2. **date:** — required, ISO format (YYYY-MM-DD)
-3. **tags:** — required, at least one tag (not empty `[]`)
+1. **Frontmatter** — must open and close with `+++`
+2. **date** — required, ISO format (YYYY-MM-DD), bare TOML date
+3. **tags** — required, at least one tag (not empty `[]`)
 4. **H1 title** — required (`# ...` after frontmatter)
 5. **Lead paragraph** — required, first non-empty non-heading line after the title, minimum 20 characters

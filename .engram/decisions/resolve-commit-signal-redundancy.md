@@ -1,9 +1,8 @@
----
-type: decision
-date: 2026-03-16
-tags: [dedup, ingest, hooks]
-links: [related:git-opt-in, related:enforce-decision-structure-with-mandatory-why]
----
++++
+date = 2026-03-16
+tags = ["dedup", "ingest", "hooks"]
+links = ["related:git-opt-in", "related:enforce-decision-structure-with-mandatory-why"]
++++
 
 # Resolve commit message vs decision signal redundancy
 

@@ -48,13 +48,13 @@ Moving a file between public and private paths changes its visibility on next re
 Use `supersedes:` to mark a decision as replacing a prior one. The superseded decision is hidden from the brief but remains queryable.
 
 ```markdown
-supersedes: old-auth    # this decision replaces old-auth
+supersedes = "old-auth"    # this decision replaces old-auth
 ```
 
-Use `links:` to express non-supersession relationships:
+Use `links` to express non-supersession relationships:
 
 ```markdown
-links: [related:redis-cluster]
+links = ["related:redis-cluster"]
 ```
 
 ### Link Types
@@ -65,12 +65,12 @@ Only `supersedes` and `related` are supported.
 
 ## Retiring Signals
 
-To mark a decision as no longer relevant without deleting it, add `status: withdrawn` to its frontmatter:
+To mark a decision as no longer relevant without deleting it, add `status = "withdrawn"` to its frontmatter:
 
 ```markdown
----
-status: withdrawn
----
++++
+status = "withdrawn"
++++
 ```
 
 Withdrawn signals are excluded from the brief and context injection but remain queryable via `@engram:query`. Use this instead of deleting signals — it preserves the decision history while keeping the brief clean.

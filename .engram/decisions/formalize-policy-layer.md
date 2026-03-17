@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-17
-tags: [architecture, hooks, policy-engine]
----
++++
+date = 2026-03-17
+tags = ["architecture", "hooks", "policy-engine"]
++++
 
 # Formalize engram policy layer
 

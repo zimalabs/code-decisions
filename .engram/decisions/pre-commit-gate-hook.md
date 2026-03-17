@@ -1,9 +1,8 @@
----
-type: decision
-date: 2026-03-17
-tags: [hooks, enforcement]
-links: [related:convert-engram-py-to-package]
----
++++
+date = 2026-03-17
+tags = ["hooks", "enforcement"]
+links = ["related:convert-engram-py-to-package"]
++++
 
 # Add PreToolUse hook to block git commit without decision signal
 

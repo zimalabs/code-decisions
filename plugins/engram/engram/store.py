@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ._constants import StrPath
 from ._commits import _is_decision_commit
+from ._frontmatter import _format_toml_frontmatter
 from ._helpers import _check_fts5, _connect, _parse_links, _slug, _slugify
 from .signal import Signal
 
@@ -201,15 +202,19 @@ class EngramStore:
 
         new_head = ""
 
-        # Pre-build set of existing source tags for O(1) dedup lookups
+        # Pre-build set of existing source values for O(1) dedup lookups
         existing_sources: set[str] = set()
         for search_dir in (self.decisions_dir, self.private_dir):
             if search_dir.is_dir():
                 for f in search_dir.glob("*.md"):
                     content = f.read_text(errors="replace")
                     for cl in content.splitlines():
-                        if cl.startswith("source:"):
-                            existing_sources.add(cl.strip())
+                        cl_stripped = cl.strip()
+                        if cl_stripped.startswith("source"):
+                            _, _, val = cl_stripped.partition("=")
+                            val = val.strip().strip('"')
+                            if val:
+                                existing_sources.add(val)
                             break
 
         for line in log_output.splitlines():
@@ -225,7 +230,7 @@ class EngramStore:
                 continue
 
             # Dedup: skip if file with this source already exists
-            if f"source: git:{commit_hash}" in existing_sources:
+            if f"git:{commit_hash}" in existing_sources:
                 continue
 
             commit_date = date_str.split()[0] if date_str else date.today().isoformat()
@@ -267,7 +272,8 @@ class EngramStore:
                 body = ""
 
             # Build signal content
-            signal = f"---\ntype: decision\ndate: {commit_date}\nsource: git:{commit_hash}\n---\n\n# {subject}\n\n"
+            fm = _format_toml_frontmatter({"date": commit_date, "source": f"git:{commit_hash}"})
+            signal = f"{fm}\n\n# {subject}\n\n"
             if body:
                 signal += f"{body}\n\n{stat}\n"
             else:
@@ -319,11 +325,11 @@ class EngramStore:
             basename = plan_file.stem
 
             # Dedup: skip if file with this source already exists
-            source_tag = f"source: plan:{basename}"
+            source_val = f"plan:{basename}"
             found = False
             if self.decisions_dir.is_dir():
                 for f in self.decisions_dir.glob("*.md"):
-                    if source_tag in f.read_text(errors="replace"):
+                    if source_val in f.read_text(errors="replace"):
                         found = True
                         break
             if found:
@@ -360,7 +366,8 @@ class EngramStore:
                 slug = f"plan-{basename}"
 
             filepath = self.decisions_dir / f"plan-{slug}.md"
-            signal = f"---\ntype: decision\ndate: {today}\nsource: plan:{basename}\n---\n\n# {title}\n\n{context}\n"
+            fm = _format_toml_frontmatter({"date": today, "source": f"plan:{basename}"})
+            signal = f"{fm}\n\n# {title}\n\n{context}\n"
             filepath.write_text(signal)
 
         # Update last_plan_ingest timestamp

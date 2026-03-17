@@ -1,10 +1,9 @@
----
-type: decision
-date: 2026-03-16
-tags: [skill, visualization, dashboard]
-links: [related:add-reindex-skill]
-status: withdrawn
----
++++
+date = 2026-03-16
+tags = ["skill", "visualization", "dashboard"]
+links = ["related:add-reindex-skill"]
+status = "withdrawn"
++++
 
 # Add @engram:visualize skill for HTML dashboard generation
 

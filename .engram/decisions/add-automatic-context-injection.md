@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-16
-tags: [hooks, context-injection, read-path]
----
++++
+date = 2026-03-16
+tags = ["hooks", "context-injection", "read-path"]
++++
 
 # Add automatic decision context injection to hooks
 

@@ -1,7 +1,6 @@
 """Content validation for pre-tool-use hook."""
 from __future__ import annotations
 
-import re
 import sys
 
 from ._frontmatter import _split_frontmatter
@@ -12,28 +11,24 @@ def _validate_content_stdin() -> str:
     text = sys.stdin.read()
     errors = []
 
-    fm_lines, content_lines = _split_frontmatter(text)
+    fm, content_lines = _split_frontmatter(text)
+    lines = text.splitlines()
 
-    if not fm_lines and text.splitlines()[:1] != ["---"]:
-        errors.append("missing opening --- frontmatter delimiter")
-        errors.append("missing closing --- frontmatter delimiter")
-    elif not fm_lines:
-        errors.append("missing closing --- frontmatter delimiter")
+    if not fm and lines[:1] != ["+++"]:
+        errors.append("missing opening +++ frontmatter delimiter")
+        errors.append("missing closing +++ frontmatter delimiter")
+    elif not fm:
+        errors.append("invalid TOML frontmatter (missing closing +++ or parse error)")
 
-    # Check date field
-    has_date = any(
-        re.match(r"^ *\d{4}-\d{2}-\d{2}", line.partition(":")[2])
-        for line in fm_lines if line.startswith("date:")
-    )
-    if not has_date:
-        errors.append("missing or invalid date: field (need YYYY-MM-DD)")
+    if fm:
+        # Check date field
+        if "date" not in fm or not fm["date"]:
+            errors.append("missing or invalid date field (need YYYY-MM-DD)")
 
-    # Check tags field
-    tags_line = next((l for l in fm_lines if l.startswith("tags:")), None)
-    if not tags_line:
-        errors.append("missing tags: field")
-    elif "[]" in tags_line:
-        errors.append("tags: is empty, add at least one tag")
+        # Check tags field
+        tags = fm.get("tags", "")
+        if not tags or tags == "[]":
+            errors.append("tags field missing or empty, add at least one tag")
 
     # Check H1 title and lead paragraph
     has_title = False

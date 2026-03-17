@@ -50,26 +50,24 @@ def _slug(filepath: StrPath) -> str:
     return Path(filepath).stem
 
 
-def _normalize_tags(raw: str) -> str:
-    """Convert YAML-style [a, b, c] to valid JSON ["a","b","c"]."""
-    raw = raw.strip()
-    if not raw or raw == "[]":
-        return "[]"
-    if '"' in raw:
-        return raw
-    inner = raw.lstrip("[").rstrip("]")
-    tags = [t.strip() for t in inner.split(",") if t.strip()]
-    return json.dumps(tags)
-
-
 def _parse_links(s: str) -> list[tuple[str, str]]:
-    """Parse links: [related:foo, supersedes:bar] -> list of (rel, target)."""
-    s = s.strip().lstrip("[").rstrip("]")
+    """Parse links field into list of (rel, target).
+
+    Input is a JSON array string like '["related:foo", "supersedes:bar"]'.
+    """
+    s = s.strip()
+    if not s or s == "[]":
+        return []
+    try:
+        items = json.loads(s)
+    except (json.JSONDecodeError, TypeError):
+        # Fallback for plain comma-separated strings
+        items = [p.strip() for p in s.lstrip("[").rstrip("]").split(",")]
     result = []
-    for part in s.split(","):
-        part = part.strip()
-        if ":" in part:
-            rel, target = part.split(":", 1)
+    for item in items:
+        item = str(item).strip()
+        if ":" in item:
+            rel, target = item.split(":", 1)
             rel, target = rel.strip(), target.strip()
             if rel and target:
                 result.append((rel, target))

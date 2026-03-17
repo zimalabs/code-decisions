@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-16
-tags: [skill, reindex, dx]
----
++++
+date = 2026-03-16
+tags = ["skill", "reindex", "dx"]
++++
 
 # Add @engram:reindex skill for on-demand index rebuilds
 

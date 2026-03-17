@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-17
-tags: [architecture, repo-structure]
----
++++
+date = 2026-03-17
+tags = ["architecture", "repo-structure"]
++++
 
 # Convert engram.py monolith to Python package
 

@@ -25,7 +25,7 @@ plugins/engram/
     __main__.py           # CLI dispatch (python3 -m engram)
     _constants.py         # Regex patterns, NOISE_WORDS, StrPath alias
     _helpers.py           # _connect, _check_fts5, _slugify, _slug, etc.
-    _frontmatter.py       # _FM_FIELDS, _split_frontmatter
+    _frontmatter.py       # _split_frontmatter, _format_toml_frontmatter
     _commits.py           # _is_decision_commit, engram_path_to_keywords
     _validate.py          # _validate_content_stdin
     _policy_defs.py       # 15 policy definitions (ALL_POLICIES)
@@ -120,11 +120,10 @@ This project is a decision memory system — use it. **Before committing any sig
 With frontmatter:
 
 ```markdown
----
-type: decision
-date: YYYY-MM-DD
-tags: [relevant, tags]
----
++++
+date = YYYY-MM-DD
+tags = ["relevant", "tags"]
++++
 
 Body explaining what was decided and why.
 ```
@@ -137,7 +136,7 @@ What counts as significant: architecture changes, new features, refactors, depen
 
 - Table/FTS names: `signals`, `signals_fts` (not `notes`)
 - SQL: parameterized queries (`?` placeholders), never string interpolation
-- Frontmatter parsing: manual line-by-line via `Signal.from_text()` (no YAML parser dependency)
+- Frontmatter parsing: TOML via `tomllib` (stdlib 3.11+), `+++` delimiters
 - Hook timeout: 15 seconds (set in `hooks.json`)
 - Filenames: `{slug}.md`, slug via `_slugify()`
-- Stdlib only: no PyYAML, no pytest, no external dependencies
+- Stdlib only: no pytest, no external dependencies (tomllib is stdlib since 3.11)

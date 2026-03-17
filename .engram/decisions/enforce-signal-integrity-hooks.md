@@ -1,9 +1,8 @@
----
-type: decision
-date: 2026-03-17
-tags: [hooks, enforcement]
-links: [related:pre-commit-gate-hook]
----
++++
+date = 2026-03-17
+tags = ["hooks", "enforcement"]
+links = ["related:pre-commit-gate-hook"]
++++
 
 # Add enforcement hooks for signal integrity, subagent context, and post-push resync
 

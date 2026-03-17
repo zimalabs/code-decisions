@@ -1,8 +1,7 @@
----
-type: decision
-date: 2026-03-17
-tags: [schema, cleanup, release]
----
++++
+date = 2026-03-17
+tags = ["schema", "cleanup", "release"]
++++
 
 # Polish engram data schema for release
 

@@ -1,9 +1,8 @@
----
-type: decision
-date: 2026-03-17
-tags: [schema, lifecycle]
-links: [related:add-visualize-skill]
----
++++
+date = 2026-03-17
+tags = ["schema", "lifecycle"]
+links = ["related:add-visualize-skill"]
++++
 
 # Add status field for decision lifecycle
 

@@ -198,7 +198,7 @@ def test_write_decision():
     store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
-        "---\ndate: 2026-03-14\ntags: [infrastructure, caching]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"infrastructure\", \"caching\"]\n+++\n\n"
         "# Use Redis for caching\n\nAlready in our stack for session storage.\n\n"
         "## Alternatives\n- Memcached — faster for simple k/v but no pub/sub\n\n"
         "## Rationale\nRedis supports pub/sub which we'll need for notifications.\n\n"
@@ -260,10 +260,10 @@ def test_ingest_commits():
     file_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("3 decisions from 7 commits", str(file_count), "3")
 
-    # Verify files have source: git:<hash>
+    # Verify files have source = "git:<hash>"
     has_source = sum(
         1 for f in Path(d, "decisions").glob("*.md")
-        if "source: git:" in f.read_text()
+        if "git:" in f.read_text()
     )
     assert_eq("all have git source", str(has_source), "3")
 
@@ -359,7 +359,7 @@ def test_ingest_manual_signal_suppresses():
     _enable_git_tracking(d)
 
     Path(d, "decisions", "feat-add-widget.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [widget]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"widget\"]\n+++\n\n"
         "# Add widget component\n\nWe chose a widget approach because it composes better than mixins.\n"
     )
 
@@ -370,7 +370,7 @@ def test_ingest_manual_signal_suppresses():
 
     assert_not_contains("manual signal preserved",
                         Path(d, "decisions", "feat-add-widget.md").read_text(),
-                        "source: git:")
+                        "source")
 
     os.chdir(ORIG_CWD)
 
@@ -394,7 +394,7 @@ def test_ingest_private_signal_suppresses():
     _enable_git_tracking(d)
 
     Path(d, "_private", "decisions", "feat-switch-to-redis-for-caching.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [caching]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"caching\"]\n+++\n\n"
         "# Switch to Redis for caching\n\nPrivate: contains vendor pricing details.\n"
     )
 
@@ -429,7 +429,7 @@ def test_ingest_no_manual_still_creates():
     assert_eq("auto-ingest creates signal when no manual", str(file_count), "1")
 
     content = list(Path(d, "decisions").glob("feat-add-api-gateway*"))[0].read_text()
-    assert_contains("auto-ingest has git source", content, "source: git:")
+    assert_contains("auto-ingest has git source", content, 'source = "git:')
 
     os.chdir(ORIG_CWD)
 
@@ -485,7 +485,7 @@ def test_ingest_plans():
 
     plan_files = sum(
         1 for f in Path(d, "decisions").glob("*.md")
-        if "source: plan:auth-redesign" in f.read_text()
+        if "plan:auth-redesign" in f.read_text()
     )
     assert_eq("plan ingested", str(plan_files), "1")
 
@@ -504,10 +504,10 @@ def test_reindex():
     store.init()
 
     Path(d, "decisions", "test-a.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Decision A\n\nContent A\n"
+        "+++\ndate = 2026-03-14\n+++\n\n# Decision A\n\nContent A\n"
     )
     Path(d, "decisions", "test-b.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Decision B\n\nContent B\n"
+        "+++\ndate = 2026-03-14\n+++\n\n# Decision B\n\nContent B\n"
     )
 
     store.reindex()
@@ -529,7 +529,7 @@ def test_brief():
     store.init()
 
     Path(d, "decisions", "pick-redis.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"infrastructure\"]\n+++\n\n"
         "# Pick Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
     )
 
@@ -550,11 +550,11 @@ def test_fts_search():
     store.init()
 
     Path(d, "decisions", "postgresql.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# Use PostgreSQL over MySQL\n\nBetter JSON support and window functions.\n"
     )
     Path(d, "decisions", "fts5.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# FTS5 needs sync triggers\n\nWithout triggers the index becomes stale.\n"
     )
 
@@ -587,11 +587,11 @@ def test_frontmatter_parsing():
         "# Decision with no frontmatter\n\nJust a plain markdown file with a heading.\n"
     )
     Path(d, "decisions", "partial.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# Partial frontmatter\n\nOnly date, no tags or source.\n"
     )
     Path(d, "decisions", "full.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [api, auth]\nsource: git:abc1234\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"api\", \"auth\"]\nsource = \"git:abc1234\"\n+++\n\n"
         "# Full frontmatter\n\nHas everything.\n"
     )
 
@@ -673,7 +673,7 @@ def test_file_column():
     store.init()
 
     Path(d, "decisions", "test-file.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Test file column\n\nContent.\n"
+        "+++\ndate = 2026-03-14\n+++\n\n# Test file column\n\nContent.\n"
     )
 
     store.reindex()
@@ -689,7 +689,7 @@ def test_private_signal_indexed():
     store.init()
 
     Path(d, "_private", "decisions", "secret-deal.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [crm, deals]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"crm\", \"deals\"]\n+++\n\n"
         "# Secret deal with Acme Corp\n\nConfidential terms discussion.\n"
     )
 
@@ -707,11 +707,11 @@ def test_brief_excludes_private():
     store.init()
 
     Path(d, "decisions", "public-choice.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [architecture]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"architecture\"]\n+++\n\n"
         "# Public architecture choice\n\nVisible to everyone in the team and included in the brief.\n"
     )
     Path(d, "_private", "decisions", "private-deal.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [business]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"business\"]\n+++\n\n"
         "# Private deal terms\n\nConfidential information about deal structure and terms.\n"
     )
 
@@ -731,7 +731,7 @@ def test_private_queryable():
     store.init()
 
     Path(d, "_private", "decisions", "competitor-intel.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [competitive]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"competitive\"]\n+++\n\n"
         "# Competitor launched new product\n\nDetails about competitor's launch.\n"
     )
 
@@ -750,7 +750,7 @@ def test_public_signals_unchanged():
     store.init()
 
     Path(d, "decisions", "normal.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# Normal public decision\n\nStandard decision content.\n"
     )
 
@@ -772,7 +772,7 @@ def test_uncommitted_summary():
     _enable_git_tracking(d)
 
     Path(d, "decisions", "test-uncommitted.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\n---\n\n"
+        "+++\ndate = 2026-03-16\n+++\n\n"
         "# Test uncommitted signal\n\nSome content.\n"
     )
 
@@ -796,7 +796,7 @@ def test_uncommitted_summary_no_git():
     store.init()
 
     Path(d, "decisions", "no-git.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\n---\n\n# No git repo\n\nContent.\n"
+        "+++\ndate = 2026-03-16\n+++\n\n# No git repo\n\nContent.\n"
     )
 
     result = store.uncommitted_summary()
@@ -843,7 +843,7 @@ def test_session_end_output():
     assert_eq("empty JSON when no signals", output, "{}")
 
     Path(d, "decisions", "test-end.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\n---\n\n# Test session end\n\nContent.\n"
+        "+++\ndate = 2026-03-16\n+++\n\n# Test session end\n\nContent.\n"
     )
 
     output = subprocess.run(
@@ -865,11 +865,11 @@ def test_supersedes_frontmatter():
     store.init()
 
     Path(d, "decisions", "old-auth.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\n---\n\n"
+        "+++\ndate = 2026-03-10\n+++\n\n"
         "# Use session-based auth\n\nServer-side sessions with cookies.\n"
     )
     Path(d, "decisions", "new-auth.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\nsupersedes: old-auth\n---\n\n"
+        "+++\ndate = 2026-03-15\nsupersedes = \"old-auth\"\n+++\n\n"
         "# Use JWT authentication\n\nMobile clients need token-based auth.\n"
     )
 
@@ -887,7 +887,7 @@ def test_links_frontmatter():
     store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\nlinks: [related:fts5-perf, related:ci-timeout]\n---\n\n"
+        "+++\ndate = 2026-03-14\nlinks = [\"related:fts5-perf\", \"related:ci-timeout\"]\n+++\n\n"
         "# Use Redis for caching\n\nAlready in our stack.\n"
     )
 
@@ -909,7 +909,7 @@ def test_excerpt_extraction():
     store.init()
 
     Path(d, "decisions", "test-excerpt.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# Pick PostgreSQL\n\nBetter JSON support and window functions.\n\n"
         "## Alternatives\nMySQL was considered.\n"
     )
@@ -927,7 +927,7 @@ def test_slug_column():
     store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Use Redis\n\nContent.\n"
+        "+++\ndate = 2026-03-14\n+++\n\n# Use Redis\n\nContent.\n"
     )
 
     store.reindex()
@@ -943,11 +943,11 @@ def test_brief_hides_superseded():
     store.init()
 
     Path(d, "decisions", "old-cache.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\ntags: [infrastructure]\n---\n\n"
+        "+++\ndate = 2026-03-10\ntags = [\"infrastructure\"]\n+++\n\n"
         "# Use Memcached for caching\n\nFast and simple key-value store for basic caching needs.\n"
     )
     Path(d, "decisions", "new-cache.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\ntags: [infrastructure]\nsupersedes: old-cache\n---\n\n"
+        "+++\ndate = 2026-03-15\ntags = [\"infrastructure\"]\nsupersedes = \"old-cache\"\n+++\n\n"
         "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n"
     )
 
@@ -967,15 +967,15 @@ def test_brief_tag_grouping():
     store.init()
 
     Path(d, "decisions", "redis.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure, caching]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"infrastructure\", \"caching\"]\n+++\n\n"
         "# Use Redis\n\nAlready in our stack for session storage and we need pub/sub.\n"
     )
     Path(d, "decisions", "jwt.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [auth, security]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"auth\", \"security\"]\n+++\n\n"
         "# Use JWT\n\nMobile clients need stateless token-based authentication.\n"
     )
     Path(d, "decisions", "postgres.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [database, storage]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"database\", \"storage\"]\n+++\n\n"
         "# Use PostgreSQL\n\nBetter JSON support and window functions than MySQL.\n"
     )
 
@@ -994,7 +994,7 @@ def test_brief_max_lines():
 
     for i in range(1, 21):
         Path(d, "decisions", f"bulk-{i}.md").write_text(
-            f"---\ntype: decision\ndate: 2026-03-14\ntags: [bulk, testing]\n---\n\n"
+            f"+++\ndate = 2026-03-14\ntags = [\"bulk\", \"testing\"]\n+++\n\n"
             f"# Bulk decision number {i}\n\nSome explanation for decision {i} with enough text to occupy space in the brief.\n"
         )
 
@@ -1015,7 +1015,7 @@ def test_brief_excerpts():
     store.init()
 
     Path(d, "decisions", "test-exc.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"infrastructure\"]\n+++\n\n"
         "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
     )
 
@@ -1033,13 +1033,13 @@ def test_supersession_chain():
     store.init()
 
     Path(d, "decisions", "auth-v1.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-01\n---\n\n# Auth v1: sessions\n\nCookie-based sessions.\n"
+        "+++\ndate = 2026-03-01\n+++\n\n# Auth v1: sessions\n\nCookie-based sessions.\n"
     )
     Path(d, "decisions", "auth-v2.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\nsupersedes: auth-v1\n---\n\n# Auth v2: JWT\n\nToken-based auth.\n"
+        "+++\ndate = 2026-03-10\nsupersedes = \"auth-v1\"\n+++\n\n# Auth v2: JWT\n\nToken-based auth.\n"
     )
     Path(d, "decisions", "auth-v3.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\nsupersedes: auth-v2\n---\n\n# Auth v3: OAuth2\n\nDelegated authentication.\n"
+        "+++\ndate = 2026-03-15\nsupersedes = \"auth-v2\"\n+++\n\n# Auth v3: OAuth2\n\nDelegated authentication.\n"
     )
 
     store.reindex()
@@ -1062,11 +1062,11 @@ def test_links_bidirectional():
     store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\nlinks: [related:redis-perf]\n---\n\n"
+        "+++\ndate = 2026-03-14\nlinks = [\"related:redis-perf\"]\n+++\n\n"
         "# Use Redis\n\nFor caching.\n"
     )
     Path(d, "decisions", "redis-perf.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# Redis p99 latency is 2ms\n\nVery fast.\n"
     )
 
@@ -1126,15 +1126,15 @@ def test_query_relevant():
     store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"infrastructure\"]\n+++\n\n"
         "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
     )
     Path(d, "decisions", "jwt-auth.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\ntags: [auth]\n---\n\n"
+        "+++\ndate = 2026-03-15\ntags = [\"auth\"]\n+++\n\n"
         "# Use JWT for authentication\n\nToken-based auth for mobile clients that need stateless sessions.\n"
     )
     Path(d, "_private", "decisions", "secret.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [caching]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"caching\"]\n+++\n\n"
         "# Secret caching strategy\n\nPrivate info about caching that should not be visible in queries.\n"
     )
 
@@ -1165,11 +1165,11 @@ def test_query_relevant_excludes_superseded():
     store.init()
 
     Path(d, "decisions", "old-cache.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\ntags: [infrastructure]\n---\n\n"
+        "+++\ndate = 2026-03-10\ntags = [\"infrastructure\"]\n+++\n\n"
         "# Use Memcached for caching\n\nFast and simple key-value store for basic caching needs.\n"
     )
     Path(d, "decisions", "new-cache.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\ntags: [infrastructure]\nsupersedes: old-cache\n---\n\n"
+        "+++\ndate = 2026-03-15\ntags = [\"infrastructure\"]\nsupersedes = \"old-cache\"\n+++\n\n"
         "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n"
     )
 
@@ -1188,16 +1188,16 @@ def test_tag_summary():
 
     for i in range(1, 4):
         Path(d, "decisions", f"arch-{i}.md").write_text(
-            f"---\ntype: decision\ndate: 2026-03-14\ntags: [architecture]\n---\n\n"
+            f"+++\ndate = 2026-03-14\ntags = [\"architecture\"]\n+++\n\n"
             f"# Architecture decision {i}\n\nContent {i}.\n"
         )
     for i in range(1, 3):
         Path(d, "decisions", f"testing-{i}.md").write_text(
-            f"---\ntype: decision\ndate: 2026-03-14\ntags: [testing]\n---\n\n"
+            f"+++\ndate = 2026-03-14\ntags = [\"testing\"]\n+++\n\n"
             f"# Testing decision {i}\n\nContent {i}.\n"
         )
     Path(d, "decisions", "ci.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [ci]\n---\n\n# CI decision\n\nContent.\n"
+        "+++\ndate = 2026-03-14\ntags = [\"ci\"]\n+++\n\n# CI decision\n\nContent.\n"
     )
 
     store.reindex()
@@ -1215,10 +1215,10 @@ def test_tag_summary_few_signals():
     store.init()
 
     Path(d, "decisions", "a.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [foo]\n---\n\n# A\n\nContent.\n"
+        "+++\ndate = 2026-03-14\ntags = [\"foo\"]\n+++\n\n# A\n\nContent.\n"
     )
     Path(d, "decisions", "b.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [bar]\n---\n\n# B\n\nContent.\n"
+        "+++\ndate = 2026-03-14\ntags = [\"bar\"]\n+++\n\n# B\n\nContent.\n"
     )
 
     store.reindex()
@@ -1234,7 +1234,7 @@ def test_post_tool_context_output():
     store.init()
 
     Path(d, "decisions", "auth-handler.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
+        "+++\ndate = 2026-03-14\n+++\n\n"
         "# Use OAuth for auth handler\n\nToken-based authentication.\n"
     )
 
@@ -1293,7 +1293,7 @@ def test_pre_compact_output():
     store.init()
 
     Path(d, "decisions", "compact-test.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-14\ntags: [testing]\n---\n\n"
+        "+++\ndate = 2026-03-14\ntags = [\"testing\"]\n+++\n\n"
         "# Compact test decision\n\nTesting pre-compact hook with valid signal to verify context injection.\n"
     )
 
@@ -1408,7 +1408,7 @@ def test_pre_tool_use_validation():
     assert_eq("non-engram file passes", output, "{}")
 
     # Valid signal
-    valid_content = "---\ndate: 2026-03-17\ntags: [architecture]\n---\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars."
+    valid_content = "+++\ndate = 2026-03-17\ntags = [\"architecture\"]\n+++\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars."
     input_json = json.dumps({"tool_name": "Write", "tool_input": {"file_path": ".engram/decisions/valid.md", "content": valid_content}})
     output = subprocess.run(
         ["bash", dispatch, "PreToolUse"],
@@ -1419,7 +1419,7 @@ def test_pre_tool_use_validation():
     assert_eq("valid signal passes", output, "{}")
 
     # Missing tags
-    no_tags_content = "---\ndate: 2026-03-17\ntags: []\n---\n\n# No tags\n\nThis decision has empty tags which should fail."
+    no_tags_content = "+++\ndate = 2026-03-17\ntags = []\n+++\n\n# No tags\n\nThis decision has empty tags which should fail."
     input_json = json.dumps({"tool_name": "Write", "tool_input": {"file_path": ".engram/decisions/no-tags.md", "content": no_tags_content}})
     output = subprocess.run(
         ["bash", dispatch, "PreToolUse"],
@@ -1449,7 +1449,7 @@ def test_notification_hook():
     store.init()
 
     Path(d, "decisions", "incomplete.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\n---\n\n# Incomplete\n\nShort.\n"
+        "+++\ndate = 2026-03-17\n+++\n\n# Incomplete\n\nShort.\n"
     )
 
     store.reindex()
@@ -1469,7 +1469,7 @@ def test_notification_hook():
     # Remove incomplete, add complete
     Path(d, "decisions", "incomplete.md").unlink()
     Path(d, "decisions", "complete.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
         "# Complete decision\n\nThis decision has proper rationale and tags for validation.\n"
     )
 
@@ -1567,7 +1567,7 @@ def test_validate_signal_valid():
     engram.EngramStore(d).init()
 
     Path(d, "decisions", "valid-test.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [architecture, validation]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"architecture\", \"validation\"]\n+++\n\n"
         "# Use strict validation for signals\n\n"
         "Enforce structure at write time to ensure all decisions include rationale, improving brief quality.\n\n"
         "## Alternatives\n- No validation — too many incomplete signals\n"
@@ -1583,7 +1583,7 @@ def test_validate_signal_missing_why():
     engram.EngramStore(d).init()
 
     Path(d, "decisions", "no-why.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [test]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"test\"]\n+++\n\n"
         "# Decision without explanation\n\n"
     )
 
@@ -1597,7 +1597,7 @@ def test_validate_signal_missing_tags():
     engram.EngramStore(d).init()
 
     Path(d, "decisions", "no-tags.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: []\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = []\n+++\n\n"
         "# Decision without tags\n\nThis decision has no tags which should fail validation checks.\n"
     )
 
@@ -1611,7 +1611,7 @@ def test_validate_signal_short_why():
     engram.EngramStore(d).init()
 
     Path(d, "decisions", "short-why.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [test]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"test\"]\n+++\n\n"
         "# Short explanation\n\nToo short.\n"
     )
 
@@ -1626,12 +1626,12 @@ def test_reindex_marks_invalid():
     store.init()
 
     Path(d, "decisions", "good.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [validation]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"validation\"]\n+++\n\n"
         "# A good decision with rationale\n\n"
         "This decision includes a proper lead paragraph explaining why it was made.\n"
     )
     Path(d, "decisions", "bad.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\n---\n\n# Bad decision\n\n"
+        "+++\ndate = 2026-03-16\n+++\n\n# Bad decision\n\n"
     )
 
     store.reindex()
@@ -1650,12 +1650,12 @@ def test_brief_excludes_invalid():
     store.init()
 
     Path(d, "decisions", "visible.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\ntags: [validation]\n---\n\n"
+        "+++\ndate = 2026-03-16\ntags = [\"validation\"]\n+++\n\n"
         "# Visible decision in brief\n\n"
         "This decision has proper rationale and should appear in the brief output.\n"
     )
     Path(d, "decisions", "hidden.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-16\n---\n\n# Hidden from brief\n\nShort.\n"
+        "+++\ndate = 2026-03-16\n+++\n\n# Hidden from brief\n\nShort.\n"
     )
 
     store.reindex()
@@ -1711,7 +1711,7 @@ def test_resync():
     store.init()
 
     Path(d, "decisions", "resync-test.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [testing]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"testing\"]\n+++\n\n"
         "# Test resync pipeline\n\nVerify that engram_resync runs ingest, reindex, and brief in one call.\n"
     )
 
@@ -1811,13 +1811,13 @@ def test_find_incomplete():
     store.init()
 
     Path(d, "decisions", "complete.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [architecture]\nlinks: [related:other]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"architecture\"]\nlinks = [\"related:other\"]\n+++\n\n"
         "# Complete decision\n\nThis decision has proper rationale and tags for validation.\n\n"
         "## Rationale\n\nWe chose this because it was the best option.\n\n"
         "## Alternatives\n\n- Option B was considered but rejected.\n"
     )
     Path(d, "decisions", "incomplete.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
+        "+++\ndate = 2026-03-17\n+++\n\n"
         "# Incomplete decision\n\nThis decision is missing tags, rationale, and links.\n"
     )
 
@@ -1837,7 +1837,7 @@ def test_find_incomplete_empty():
     store.init()
 
     Path(d, "decisions", "done.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\nlinks: [related:other]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\nlinks = [\"related:other\"]\n+++\n\n"
         "# Done decision\n\nThis decision has everything it needs and should not appear.\n\n"
         "## Rationale\n\nGood reasons.\n"
     )
@@ -1855,11 +1855,11 @@ def test_find_incomplete_source_classification():
     store.init()
 
     Path(d, "decisions", "agent-written.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
+        "+++\ndate = 2026-03-17\n+++\n\n"
         "# Agent written decision\n\nThis was written by the agent during the session.\n"
     )
     Path(d, "decisions", "auto-ingested.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\nsource: git:abc123\n---\n\n"
+        "+++\ndate = 2026-03-17\nsource = \"git:abc123\"\n+++\n\n"
         "# Auto ingested from commit\n\nImported from git history automatically.\n"
     )
 
@@ -1885,7 +1885,7 @@ def test_stop_hook_backfill_nudge():
     store.init()
 
     Path(d, "decisions", "incomplete-stop.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
+        "+++\ndate = 2026-03-17\n+++\n\n"
         "# Incomplete for stop test\n\nShort.\n"
     )
 
@@ -1916,7 +1916,7 @@ def test_notification_backfill_nudge():
     store.init()
 
     Path(d, "decisions", "incomplete-notif.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
+        "+++\ndate = 2026-03-17\n+++\n\n"
         "# Incomplete for notification test\n\nShort.\n"
     )
 
@@ -1942,7 +1942,7 @@ def test_status_withdrawn_indexed():
     store.init()
 
     Path(d, "decisions", "old-feature.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\ntags: [feature]\nstatus: withdrawn\n---\n\n"
+        "+++\ndate = 2026-03-10\ntags = [\"feature\"]\nstatus = \"withdrawn\"\n+++\n\n"
         "# Add visualize skill\n\nFeature was planned but never implemented, withdrawing this decision.\n"
     )
 
@@ -1952,7 +1952,7 @@ def test_status_withdrawn_indexed():
     assert_eq("status column stores withdrawn", status_val, "withdrawn")
 
     Path(d, "decisions", "active-feature.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-11\ntags: [feature]\n---\n\n"
+        "+++\ndate = 2026-03-11\ntags = [\"feature\"]\n+++\n\n"
         "# Keep this feature active\n\nThis decision is current and should default to active status.\n"
     )
 
@@ -1969,11 +1969,11 @@ def test_brief_hides_withdrawn():
     store.init()
 
     Path(d, "decisions", "active-choice.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\ntags: [architecture]\n---\n\n"
+        "+++\ndate = 2026-03-15\ntags = [\"architecture\"]\n+++\n\n"
         "# Use PostgreSQL for storage\n\nRelational model fits our query patterns well and we need ACID.\n"
     )
     Path(d, "decisions", "withdrawn-choice.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\ntags: [feature]\nstatus: withdrawn\n---\n\n"
+        "+++\ndate = 2026-03-10\ntags = [\"feature\"]\nstatus = \"withdrawn\"\n+++\n\n"
         "# Add dashboard visualization\n\nFeature was planned but never built, no longer relevant to direction.\n"
     )
 
@@ -1993,11 +1993,11 @@ def test_query_relevant_excludes_withdrawn():
     store.init()
 
     Path(d, "decisions", "active-storage.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-15\ntags: [storage]\n---\n\n"
+        "+++\ndate = 2026-03-15\ntags = [\"storage\"]\n+++\n\n"
         "# Use S3 for file storage\n\nScalable object storage for user uploads and attachments.\n"
     )
     Path(d, "decisions", "withdrawn-storage.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-10\ntags: [storage]\nstatus: withdrawn\n---\n\n"
+        "+++\ndate = 2026-03-10\ntags = [\"storage\"]\nstatus = \"withdrawn\"\n+++\n\n"
         "# Use local disk for file storage\n\nWas planned but never implemented, switching to cloud storage.\n"
     )
 
@@ -2061,7 +2061,7 @@ def test_pre_commit_gate():
     import time
     time.sleep(0.1)  # ensure mtime is newer than index.db
     Path(d, "decisions", "new-feature.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [feature]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"feature\"]\n+++\n\n"
         "# Add new feature\n\nThis feature improves the user experience significantly.\n"
     )
     output = subprocess.run(
@@ -2082,7 +2082,7 @@ def test_pre_delete_guard():
     store = engram.EngramStore(d)
     store.init()
     Path(d, "decisions", "keep-me.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n# Keep me\n\nThis should not be deleted.\n"
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n# Keep me\n\nThis should not be deleted.\n"
     )
     test_cwd = str(TEST_DIR / "test-pre-delete-guard")
 
@@ -2158,7 +2158,7 @@ def test_pre_tool_use_edit_guard():
     assert_contains("mentions append-only", output, "append-only")
 
     # Edit that modifies content (non-empty new_string) → allow
-    input_json = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": ".engram/decisions/test.md", "old_string": "tags: []", "new_string": "tags: [architecture]"}})
+    input_json = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": ".engram/decisions/test.md", "old_string": "tags = []", "new_string": "tags = [\"architecture\"]"}})
     output = subprocess.run(
         ["bash", dispatch, "PreToolUse"],
         input=input_json,
@@ -2186,7 +2186,7 @@ def test_subagent_stop_context():
     store = engram.EngramStore(d)
     store.init()
     Path(d, "decisions", "test-decision.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
         "# Test decision for subagent\n\nSubagents should see this decision in their context.\n"
     )
     store.reindex()
@@ -2241,7 +2241,7 @@ def test_post_push_resync():
 
     # git push → resync message
     Path(d, "decisions", "push-test.md").write_text(
-        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n"
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
         "# Push test\n\nThis should be resynced after push.\n"
     )
     output = subprocess.run(
