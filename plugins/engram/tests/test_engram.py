@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import engram
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SCHEMA_FILE = SCRIPT_DIR.parent / "schema.sql"
+SCHEMA_FILE = SCRIPT_DIR.parent / "schemas" / "schema.sql"
 TEST_DIR = Path(tempfile.mkdtemp(prefix="engram-test."))
 PASS = 0
 FAIL = 0

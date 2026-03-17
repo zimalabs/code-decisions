@@ -4,11 +4,19 @@
     "name": "Zima Labs",
     "url": "https://github.com/zimalabs"
   },
+  "metadata": {
+    "description": "Plugins by Zima Labs for AI agent memory and cognition"
+  },
   "plugins": [
     {
       "name": "engram",
       "source": "./plugins/engram",
-      "description": "Structured decision memory for AI agents. Auto-capture, search, and evolution tracking. Zero-config, privacy-first."
+      "description": "Structured decision memory for AI agents. Auto-capture, search, and evolution tracking. Zero-config, privacy-first.",
+      "version": "0.3.0",
+      "license": "MIT",
+      "keywords": ["memory", "decisions", "agents", "context", "signals"],
+      "category": "productivity",
+      "tags": ["memory", "decision-tracking", "context-management"]
     }
   ]
 }

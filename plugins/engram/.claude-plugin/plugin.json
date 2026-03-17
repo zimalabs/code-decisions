@@ -6,5 +6,8 @@
     "name": "Zima Labs",
     "url": "https://github.com/zimalabs"
   },
-  "repository": "https://github.com/zimalabs/engram"
+  "repository": "https://github.com/zimalabs/engram",
+  "homepage": "https://github.com/zimalabs/engram",
+  "license": "MIT",
+  "keywords": ["memory", "decisions", "agents", "context", "signals"]
 }

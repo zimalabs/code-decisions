@@ -32,8 +32,8 @@ plugins/engram/
     policy.py             # PolicyEngine, Policy, PolicyLevel, PolicyResult, SessionState
     signal.py             # Signal dataclass
     store.py              # EngramStore class
-  schema.sql              # SQLite schema (signals table + FTS5 + triggers)
   schemas/
+    schema.sql            # SQLite schema (signals table + FTS5 + triggers)
     README.md             # Schema overview + shared field/link type reference
     decision.md           # Decision signal schema (source of truth)
   hooks/

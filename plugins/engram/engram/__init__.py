@@ -21,4 +21,4 @@ __all__ = [
 
 # Resolve schema.sql relative to this package (up one level to plugins/engram/)
 ENGRAM_LIB_DIR = Path(__file__).resolve().parent.parent
-ENGRAM_SCHEMA_FILE = Path(os.environ.get("ENGRAM_SCHEMA_FILE", ENGRAM_LIB_DIR / "schema.sql"))
+ENGRAM_SCHEMA_FILE = Path(os.environ.get("ENGRAM_SCHEMA_FILE", ENGRAM_LIB_DIR / "schemas" / "schema.sql"))
