@@ -3,6 +3,6 @@
 # Usage: bash dispatch.sh <event>
 set -euo pipefail
 trap 'printf "{}\n"; exit 0' ERR
-export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/src"
+export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}"
 input=$(cat)
 printf '%s' "$input" | python3 -m engram policy "$@"

@@ -22,20 +22,19 @@ make dev          # symlink plugin into Claude Code cache
 plugin/                   # Installable plugin
   .claude-plugin/
     plugin.json           # Plugin manifest
-  src/
-    engram/               # Core library package (stdlib only)
-      __init__.py         # ENGRAM_LIB_DIR, ENGRAM_SCHEMA_FILE, re-exports
-      __main__.py         # CLI dispatch (python3 -m engram)
-      py.typed            # mypy marker
-      _constants.py       # Regex patterns, NOISE_WORDS, StrPath alias
-      _helpers.py         # _connect, _check_fts5, _slugify, _slug, etc.
-      _frontmatter.py     # _split_frontmatter, _format_toml_frontmatter
-      _commits.py         # _is_decision_commit, engram_path_to_keywords
-      _validate.py        # _validate_content_stdin
-      _policy_defs.py     # 15 policy definitions (ALL_POLICIES)
-      policy.py           # PolicyEngine, Policy, PolicyLevel, PolicyResult, SessionState
-      signal.py           # Signal dataclass
-      store.py            # EngramStore class
+  engram/                 # Core library package (stdlib only)
+    __init__.py           # ENGRAM_LIB_DIR, ENGRAM_SCHEMA_FILE, re-exports
+    __main__.py           # CLI dispatch (python3 -m engram)
+    py.typed              # mypy marker
+    _constants.py         # Regex patterns, NOISE_WORDS, StrPath alias
+    _helpers.py           # _connect, _check_fts5, _slugify, _slug, etc.
+    _frontmatter.py       # _split_frontmatter, _format_toml_frontmatter
+    _commits.py           # _is_decision_commit, engram_path_to_keywords
+    _validate.py          # _validate_content_stdin
+    _policy_defs.py       # 15 policy definitions (ALL_POLICIES)
+    policy.py             # PolicyEngine, Policy, PolicyLevel, PolicyResult, SessionState
+    signal.py             # Signal dataclass
+    store.py              # EngramStore class
   schemas/
     schema.sql            # SQLite schema (signals table + FTS5 + triggers)
     README.md             # Schema overview + shared field/link type reference
@@ -96,14 +95,14 @@ Link rel_types: `supersedes`, `related`
 
 ## Adding a New Function
 
-1. Add the function to the appropriate module in `plugin/src/engram/`
+1. Add the function to the appropriate module in `plugin/engram/`
 2. Add tests to `tests/test_engram.py`
 3. Wire into hooks via a new policy in `_policy_defs.py` if it should run at session events
 4. Run `make check`
 
 ## Adding a New Policy
 
-1. Write a condition function in `plugin/src/engram/_policy_defs.py`
+1. Write a condition function in `plugin/engram/_policy_defs.py`
 2. Add a `Policy(...)` instance to `ALL_POLICIES` with name, level, events, matchers
 3. Add tests to `tests/test_policy.py`
 4. Run `make check` — no hooks.json changes needed (dispatch.sh routes all events)

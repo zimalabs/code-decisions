@@ -519,7 +519,7 @@ def test_full_engine_with_all_policies():
 
 def test_policy_list_command():
     """python3 -m engram policy (no args) lists policies."""
-    parent_dir = str(Path(__file__).resolve().parent.parent / "plugin" / "src")
+    parent_dir = str(Path(__file__).resolve().parent.parent / "plugin")
     result = subprocess.run(
         [sys.executable, "-m", "engram", "policy"],
         capture_output=True, text=True,
@@ -829,7 +829,7 @@ def test_engine_trace_disabled_policy():
 
 def test_policy_command_with_trace():
     """python3 -m engram policy --trace outputs trace JSON."""
-    parent_dir = str(Path(__file__).resolve().parent.parent / "plugin" / "src")
+    parent_dir = str(Path(__file__).resolve().parent.parent / "plugin")
     result = subprocess.run(
         [sys.executable, "-m", "engram", "policy", "--trace", "PostToolUse"],
         input='{"tool_name": "Read"}',

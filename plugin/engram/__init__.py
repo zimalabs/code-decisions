@@ -20,8 +20,8 @@ __all__ = [
     "Policy", "PolicyEngine", "PolicyLevel", "PolicyResult", "SessionState",
 ]
 
-# src/engram/ → src/ → plugin/ (CLAUDE_PLUGIN_ROOT)
-ENGRAM_LIB_DIR = Path(__file__).resolve().parent.parent.parent
+# engram/ → plugin/ (CLAUDE_PLUGIN_ROOT)
+ENGRAM_LIB_DIR = Path(__file__).resolve().parent.parent
 ENGRAM_SCHEMA_FILE = Path(
     os.environ.get("ENGRAM_SCHEMA_FILE", ENGRAM_LIB_DIR / "schemas" / "schema.sql")
 )

@@ -9,8 +9,8 @@ test:
 
 lint:
 	shellcheck plugin/hooks/*.sh
-	uv run ruff check plugin/src/engram/
-	uv run mypy plugin/src/engram/
+	uv run ruff check plugin/engram/
+	uv run mypy plugin/engram/
 
 check: lint test
 
