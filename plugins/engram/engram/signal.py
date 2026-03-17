@@ -105,10 +105,26 @@ class Signal:
         if not lead_paragraph or len(lead_paragraph) < 20:
             errors.append("lead paragraph after title must exist and be >= 20 chars (explains why)")
 
-        # Required body sections
+        # Required body sections — must exist AND have at least 1 non-empty line
         for section in ("## Rationale", "## Alternatives"):
             if section not in self.body:
                 errors.append(f"missing required section: {section}")
+            else:
+                # Check for non-empty content after the heading
+                in_section = False
+                has_content = False
+                for line in self.body.splitlines():
+                    if line.strip() == section:
+                        in_section = True
+                        continue
+                    if in_section:
+                        if line.startswith("## "):
+                            break
+                        if line.strip():
+                            has_content = True
+                            break
+                if not has_content:
+                    errors.append(f"section {section} is empty — add at least one line of content")
 
         return (len(errors) == 0, "; ".join(errors) + "; " if errors else "")
 

@@ -48,10 +48,26 @@ def _validate_content_stdin() -> str:
     if not lead or len(lead) < 20:
         errors.append("lead paragraph after title must exist and be >= 20 chars (explains why)")
 
-    # Required body sections
+    # Required body sections — must exist AND have at least 1 non-empty line
+    all_lines = text.splitlines()
     for section in ("## Rationale", "## Alternatives"):
         if section not in text:
             errors.append(f"missing required section: {section}")
+        else:
+            in_section = False
+            has_content = False
+            for line in all_lines:
+                if line.strip() == section:
+                    in_section = True
+                    continue
+                if in_section:
+                    if line.startswith("## "):
+                        break
+                    if line.strip():
+                        has_content = True
+                        break
+            if not has_content:
+                errors.append(f"section {section} is empty — add at least one line of content")
 
     if errors:
         return "; ".join(errors) + "; "

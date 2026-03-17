@@ -24,6 +24,7 @@ class EngramStore:
         self.db_path = self.root / "index.db"
         self.decisions_dir = self.root / "decisions"
         self.private_dir = self.root / "_private" / "decisions"
+        self.archive_dir = self.root / "archive" / "decisions"
 
     def load_config(self) -> dict:
         """Load .engram/config.toml as a parsed dict."""
@@ -114,7 +115,7 @@ class EngramStore:
                 conn.executescript(engram.ENGRAM_SCHEMA_FILE.read_text())
         return True
 
-    def _index_file(self, filepath: StrPath, private: int = 0) -> None:
+    def _index_file(self, filepath: StrPath, private: int = 0, status_override: str = "") -> None:
         """Parse a signal markdown file and insert into index.db."""
         sig = Signal.from_file(filepath)
 
@@ -126,14 +127,18 @@ class EngramStore:
         slug = _slug(filepath)
 
         # Normalize status
-        if sig.status not in ("active", "withdrawn"):
+        if sig.status not in ("active", "withdrawn", "archived"):
             sig.status = "active"
 
-        # Validate — invalid overrides frontmatter status (but not withdrawn)
-        ok, _ = sig.validate()
-        if not ok and sig.status != "withdrawn":
-            sig.status = "invalid"
-            print(f"engram: warning: {Path(filepath).name} is incomplete (missing rationale)", file=sys.stderr)
+        # Status override (e.g. archived signals)
+        if status_override:
+            sig.status = status_override
+        else:
+            # Validate — invalid overrides frontmatter status (but not withdrawn)
+            ok, _ = sig.validate()
+            if not ok and sig.status != "withdrawn":
+                sig.status = "invalid"
+                print(f"engram: warning: {Path(filepath).name} is incomplete (missing rationale)", file=sys.stderr)
 
         # Timestamps
         p = Path(filepath)
@@ -200,6 +205,11 @@ class EngramStore:
         if self.decisions_dir.is_dir():
             for f in sorted(self.decisions_dir.glob("*.md")):
                 self._index_file(str(f), private=0)
+
+        # Index archived signals (still searchable, excluded from brief)
+        if self.archive_dir.is_dir():
+            for f in sorted(self.archive_dir.glob("*.md")):
+                self._index_file(str(f), private=0, status_override="archived")
 
         # Index private signals
         if self.private_dir.is_dir():
@@ -444,6 +454,10 @@ class EngramStore:
                 "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn'"
             ).fetchone()[0]
 
+            archived_count = conn.execute(
+                "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='archived'"
+            ).fetchone()[0]
+
             brief = f"# Decision Context ({decision_count} decisions)"
 
             # Check distinct tag count
@@ -507,6 +521,8 @@ class EngramStore:
                 footer_parts.append(f"{withdrawn_count} withdrawn signal(s)")
             if invalid_count > 0:
                 footer_parts.append(f"{invalid_count} signal(s) incomplete (missing rationale)")
+            if archived_count > 0:
+                footer_parts.append(f"{archived_count} archived signal(s)")
 
             if footer_parts:
                 brief += f"\n\n*+ {', '.join(footer_parts)} not shown*"
@@ -520,10 +536,72 @@ class EngramStore:
 
         (self.root / "brief.md").write_text(brief + "\n")
 
+    def compact(self, max_age_days: int = 90) -> int:
+        """Archive old, unreferenced signals. Returns count of archived signals."""
+        if not self.decisions_dir.is_dir():
+            return 0
+
+        # Need index to check links
+        if not self.db_path.is_file():
+            return 0
+
+        cutoff = date.today().toordinal() - max_age_days
+        archived = 0
+
+        with self.connect() as conn:
+            # Build set of referenced slugs (targets of links)
+            referenced: set[str] = set()
+            for row in conn.execute("SELECT target_file FROM links").fetchall():
+                referenced.add(row[0])
+
+            # Build set of pinned slugs
+            pinned: set[str] = set()
+            for f in self.decisions_dir.glob("*.md"):
+                sig = Signal.from_file(str(f))
+                fm_text = f.read_text(errors="replace")
+                # Check for pin = true in frontmatter
+                from ._frontmatter import _split_frontmatter
+                fm, _ = _split_frontmatter(fm_text)
+                if fm.get("pin", False):
+                    pinned.add(_slug(str(f)))
+
+        for f in sorted(self.decisions_dir.glob("*.md")):
+            slug = _slug(str(f))
+
+            # Never archive pinned signals
+            if slug in pinned:
+                continue
+
+            # Never archive referenced signals
+            if slug in referenced:
+                continue
+
+            # Check age
+            sig = Signal.from_file(str(f))
+            if not sig.date:
+                continue
+
+            try:
+                sig_date = date.fromisoformat(sig.date)
+            except ValueError:
+                continue
+
+            if sig_date.toordinal() > cutoff:
+                continue
+
+            # Move to archive
+            self.archive_dir.mkdir(parents=True, exist_ok=True)
+            dest = self.archive_dir / f.name
+            f.rename(dest)
+            archived += 1
+
+        return archived
+
     def resync(self) -> None:
-        """Full sync: ingest commits, ingest plans, reindex, generate brief."""
+        """Full sync: ingest commits, ingest plans, compact, reindex, generate brief."""
         self.ingest_commits()
         self.ingest_plans()
+        self.compact()
         self.reindex()
         self.brief()
 

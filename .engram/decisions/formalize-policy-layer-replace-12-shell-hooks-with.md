@@ -3,6 +3,7 @@ date = 2026-03-17
 tags = ["hooks", "architecture", "policy-engine"]
 links = ["related:formalize-policy-layer", "related:enforce-signal-integrity-hooks"]
 source = "git:b1fceb01aa9f2072aa6d577ee6dbba12eef7de88"
+status = "withdrawn"
 +++
 
 # Formalize policy layer: replace 12 shell hooks with Python policy engine

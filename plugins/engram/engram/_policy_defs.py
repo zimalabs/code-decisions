@@ -94,7 +94,7 @@ def _json_escape(s: str) -> str:
 # ── BLOCK policies ───────────────────────────────────────────────────
 
 def _commit_gate_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
-    """Block git commit if no decision signal was written this session."""
+    """Nudge about missing signals on git commit (no longer blocks)."""
     if not Path(f"{ENGRAM_DIR}/decisions").is_dir():
         return None
 
@@ -102,7 +102,7 @@ def _commit_gate_condition(data: dict[str, Any], state: SessionState) -> PolicyR
     if not cmd:
         return None
 
-    # Only gate on git commit (not amend, not other git commands)
+    # Only nudge on git commit (not amend, not other git commands)
     if not cmd.startswith("git commit"):
         return None
     if "--amend" in cmd:
@@ -111,13 +111,12 @@ def _commit_gate_condition(data: dict[str, Any], state: SessionState) -> PolicyR
     if state.has_recent_signals(ENGRAM_DIR):
         return None
 
+    # Nudge once, don't block
     return PolicyResult(
         matched=True,
-        decision="block",
-        reason=(
-            "No decision signal written this session. Write a signal to "
-            ".engram/decisions/{slug}.md before committing (use /engram:capture). "
-            "If this change is trivial (typo, formatting), amend with --amend to bypass."
+        system_message=(
+            "No decision signal written this session. If you made significant decisions, "
+            "consider writing a signal after this commit (use /engram:capture)."
         ),
     )
 
@@ -453,7 +452,7 @@ def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> Polic
 
 
 def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
-    """Check for recent signals at stop; nudge if none."""
+    """Reflection prompt at stop — summarize session edits and ask about decisions."""
     decisions_dir = Path(ENGRAM_DIR) / "decisions"
     if not decisions_dir.is_dir():
         return PolicyResult(matched=True, ok=True)
@@ -492,9 +491,19 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     if not state.has_edits():
         return PolicyResult(matched=True, ok=True)
 
+    # Build a reflection prompt with the list of edited files
+    edited = state.files_edited()
+    files_summary = ", ".join(edited[:10])
+    if len(edited) > 10:
+        files_summary += f" (+{len(edited) - 10} more)"
+
     return PolicyResult(
         matched=True, ok=True,
-        reason="No new decision signals this session. If you made significant changes, consider /engram:capture.",
+        reason=(
+            f"Session reflection: you edited {len(edited)} file(s): {files_summary}. "
+            "Which of these changes were significant decisions (architecture, new features, refactors, dependency changes)? "
+            "Write signals for those with /engram:capture. Skip if all changes were routine."
+        ),
     )
 
 
@@ -564,14 +573,15 @@ def _incomplete_nudge_condition(data: dict[str, Any], state: SessionState) -> Po
 # ── Registry ─────────────────────────────────────────────────────────
 
 ALL_POLICIES: list[Policy] = [
-    # BLOCK
+    # NUDGE (was BLOCK — downgraded to reduce adversarial compliance)
     Policy(
         name="commit-gate",
-        description="Block git commit if no decision signal was written this session",
-        level=PolicyLevel.BLOCK,
-        events=["PreToolUse"],
+        description="Nudge about missing signals on git commit",
+        level=PolicyLevel.NUDGE,
+        events=["PostToolUse"],
         matchers=["Bash"],
         condition=_commit_gate_condition,
+        once_per_session=True,
     ),
     Policy(
         name="delete-guard",

@@ -11,7 +11,8 @@ File: `.engram/decisions/{slug}.md`
 | `source` | no | Origin: `plan:<file>` (auto-set), `git:<hash>` (when git tracking enabled) |
 | `supersedes` | no | File stem of the signal this replaces |
 | `links` | no | TOML array: `["related:stem"]` |
-| `status` | no | Lifecycle status: `active` (default) or `withdrawn` |
+| `status` | no | Lifecycle status: `active` (default), `withdrawn`, or `archived` |
+| `pin` | no | Boolean `true` — prevents automatic archival by `compact()` |
 | `created_at` | no | ISO datetime — set once at creation, preserved across edits |
 
 ## Template
@@ -22,7 +23,8 @@ date = YYYY-MM-DD
 tags = ["topic1", "topic2"]
 supersedes = "old-slug"    # optional: replaces a prior decision
 links = ["related:some-x"]          # optional: related
-status = "active"          # optional: active (default) or withdrawn
+status = "active"          # optional: active (default), withdrawn, or archived
+pin = true                 # optional: prevents automatic archival
 +++
 
 # Title of the decision

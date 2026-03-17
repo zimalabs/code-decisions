@@ -212,21 +212,22 @@ def test_engine_exception_isolation():
 
 # ── commit-gate tests ───────────────────────────────────────────────
 
-def test_commit_gate_blocks_plain_commit():
-    """commit-gate blocks git commit when no signal exists."""
-    print("\n── test_commit_gate_blocks_plain_commit ──")
-    engram_dir, store = _make_engram("commit-gate-block")
+def test_commit_gate_nudges_plain_commit():
+    """commit-gate nudges (not blocks) git commit when no signal exists."""
+    print("\n── test_commit_gate_nudges_plain_commit ──")
+    engram_dir, store = _make_engram("commit-gate-nudge")
     store.reindex()
 
     orig_cwd = os.getcwd()
     os.chdir(engram_dir.parent)
     try:
         from engram._policy_defs import _commit_gate_condition
-        state = _make_session_state("cg-block")
+        state = _make_session_state("cg-nudge")
         data = {"tool_input": {"command": "git commit -m 'test'"}}
         result = _commit_gate_condition(data, state)
-        assert_eq("blocks", result.decision, "block")
-        assert_contains("reason", result.reason, "No decision signal")
+        assert_eq("matched", result.matched, True)
+        assert_contains("nudge message", result.system_message, "No decision signal")
+        assert_eq("no block", result.decision, "")
     finally:
         os.chdir(orig_cwd)
 
@@ -527,7 +528,7 @@ def test_decision_language_ignores_normal():
 # ── stop-nudge tests ───────────────────────────────────────────────
 
 def test_stop_nudge_no_signals():
-    """stop-nudge nudges when no recent signals exist."""
+    """stop-nudge shows reflection prompt when no recent signals exist."""
     print("\n── test_stop_nudge_no_signals ──")
     engram_dir, store = _make_engram("stop-nudge")
     store.reindex()
@@ -540,7 +541,7 @@ def test_stop_nudge_no_signals():
         state.record_edit("src/main.py")  # session must have edits to trigger nudge
         result = _stop_nudge_condition({}, state)
         assert_eq("ok", result.ok, True)
-        assert_contains("nudge reason", result.reason, "No new decision signals")
+        assert_contains("reflection prompt", result.reason, "Session reflection")
     finally:
         os.chdir(orig_cwd)
 
@@ -657,6 +658,9 @@ def test_policy_list_command():
     names = [p["name"] for p in policies]
     assert_contains("has commit-gate", str(names), "commit-gate")
     assert_contains("has delete-guard", str(names), "delete-guard")
+    # Verify commit-gate is now NUDGE level, not BLOCK
+    cg = [p for p in policies if p["name"] == "commit-gate"][0]
+    assert_eq("commit-gate is NUDGE", cg["level"], "NUDGE")
 
 
 # ── Activity tracking tests (F) ──────────────────────────────────────
@@ -895,7 +899,7 @@ def test_stop_nudge_silent_for_readonly():
 
 
 def test_stop_nudge_fires_with_edits():
-    """stop-nudge nudges when session has edits but no signals."""
+    """stop-nudge shows reflection prompt when session has edits but no signals."""
     print("\n── test_stop_nudge_fires_with_edits ──")
     engram_dir, store = _make_engram("stop-nudge-edits")
     store.reindex()
@@ -908,7 +912,8 @@ def test_stop_nudge_fires_with_edits():
         state.record_edit("src/main.py")
         result = _stop_nudge_condition({}, state)
         assert_eq("ok", result.ok, True)
-        assert_contains("nudge with edits", result.reason, "No new decision signals")
+        assert_contains("reflection prompt", result.reason, "Session reflection")
+        assert_contains("lists files", result.reason, "src/main.py")
     finally:
         os.chdir(orig_cwd)
 
@@ -1012,7 +1017,7 @@ def main():
     test_engine_exception_isolation()
 
     # Policy tests
-    test_commit_gate_blocks_plain_commit()
+    test_commit_gate_nudges_plain_commit()
     test_commit_gate_allows_amend()
     test_commit_gate_allows_with_signal()
     test_delete_guard_blocks_rm()

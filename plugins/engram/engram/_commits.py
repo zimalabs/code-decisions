@@ -36,12 +36,14 @@ def _is_decision_commit(subject: str, commit_hash: str) -> bool:
         return True
 
     # Match: significant file changes (schema, deps, CI, infra)
+    # Require 2+ changed files — touching a single config file alone isn't a decision
     try:
         result = subprocess.run(
             ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit_hash],
             capture_output=True, text=True, errors="replace",
         )
-        if _DECISION_FILES.search(result.stdout):
+        files = [f for f in result.stdout.strip().splitlines() if f.strip()]
+        if len(files) >= 2 and _DECISION_FILES.search(result.stdout):
             return True
     except (OSError, subprocess.SubprocessError):
         pass

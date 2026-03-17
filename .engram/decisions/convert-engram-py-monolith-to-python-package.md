@@ -3,6 +3,7 @@ date = 2026-03-17
 tags = ["architecture", "migration"]
 links = ["related:convert-engram-py-to-package"]
 source = "git:841d5737bab3155a3acc39964e46f49d80d90fd5"
+status = "withdrawn"
 +++
 
 # Convert engram.py monolith to Python package

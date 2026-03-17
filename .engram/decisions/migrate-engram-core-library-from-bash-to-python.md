@@ -3,6 +3,7 @@ date = 2026-03-17
 tags = ["architecture", "migration"]
 links = ["related:convert-engram-py-to-package", "related:migrate-signal-frontmatter-from-yaml-to-toml"]
 source = "git:a21a150c3a895c01b9734ee12a1b073bf9fff5ef"
+status = "withdrawn"
 +++
 
 # Migrate engram core library from bash to Python

@@ -8,11 +8,11 @@ from pathlib import Path
 _DECISION_PREFIXES = re.compile(r"^(feat|feat!|breaking|refactor|perf)[:(]")
 
 # Prefixes that are never decisions
-_SKIP_PREFIXES = re.compile(r"^(fix|docs|test|tests|chore|ci|style|build|typo|wip|merge)[:(]")
+_SKIP_PREFIXES = re.compile(r"^(fix|docs|test|tests|chore|ci|style|build|typo|wip|merge|remove|delete|clean|rename|move|bump|update)[:(]")
 
 # Commit message patterns that indicate architectural/dependency decisions
 _DECISION_PATTERNS = re.compile(
-    r"(migrate|switch to|replace|drop|remove|add support|adopt|introduce|upgrade|deprecate|rewrite)",
+    r"(migrate|switch to|replace|add support|adopt|introduce|deprecate|rewrite)",
     re.IGNORECASE,
 )
 

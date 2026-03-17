@@ -2077,15 +2077,15 @@ def test_pre_commit_gate():
     ).stdout.strip()
     assert_eq("non-commit command allowed", output, "{}")
 
-    # ── git commit with no recent decision → block ──
+    # ── git commit with no recent decision → nudge (not block) ──
     output = subprocess.run(
-        ["bash", dispatch, "PreToolUse"],
+        ["bash", dispatch, "PostToolUse"],
         input='{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
-    assert_contains("blocks commit without decision", output, '"decision": "block"')
-    assert_contains("block mentions capture", output, "/engram:capture")
+    assert_contains("nudges on commit without decision", output, "No decision signal")
+    assert_contains("nudge mentions capture", output, "/engram:capture")
 
     # ── git commit --amend → allow (bypass) ──
     output = subprocess.run(
@@ -2365,6 +2365,171 @@ def test_validate_partial_sections():
     assert_not_contains("does not mention Alternatives", errors, "## Alternatives")
 
 
+# ── Compaction tests ────────────────────────────────────────────────
+
+def test_compact_archives_old_signal():
+    print("test_compact_archives_old_signal:")
+    d = f"{TEST_DIR}/compact-old"
+    engram_dir = f"{d}/.engram"
+    store = engram.EngramStore(engram_dir)
+    store.init()
+
+    # Write a signal with an old date
+    sig_path = Path(engram_dir) / "decisions" / "old-decision.md"
+    sig_path.write_text(
+        "+++\ndate = 2025-01-01\ntags = [\"test\"]\n+++\n\n"
+        "# Old decision\n\nThis is old and should be archived.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt was old.\n"
+    )
+
+    store.reindex()
+
+    # compact with 0-day threshold to force archival
+    archived = store.compact(max_age_days=0)
+    assert_eq("one archived", archived, 1)
+    assert_eq("original removed", sig_path.is_file(), False)
+    assert_file_exists("moved to archive", str(Path(engram_dir) / "archive" / "decisions" / "old-decision.md"))
+
+
+def test_compact_keeps_recent_signal():
+    print("test_compact_keeps_recent_signal:")
+    d = f"{TEST_DIR}/compact-recent"
+    engram_dir = f"{d}/.engram"
+    store = engram.EngramStore(engram_dir)
+    store.init()
+
+    from datetime import date
+    today = date.today().isoformat()
+    sig_path = Path(engram_dir) / "decisions" / "recent-decision.md"
+    sig_path.write_text(
+        f"+++\ndate = {today}\ntags = [\"test\"]\n+++\n\n"
+        "# Recent decision\n\nThis is recent and should stay.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt is new.\n"
+    )
+
+    store.reindex()
+    archived = store.compact(max_age_days=90)
+    assert_eq("none archived", archived, 0)
+    assert_file_exists("still exists", str(sig_path))
+
+
+def test_compact_keeps_pinned_signal():
+    print("test_compact_keeps_pinned_signal:")
+    d = f"{TEST_DIR}/compact-pinned"
+    engram_dir = f"{d}/.engram"
+    store = engram.EngramStore(engram_dir)
+    store.init()
+
+    sig_path = Path(engram_dir) / "decisions" / "pinned-decision.md"
+    sig_path.write_text(
+        "+++\ndate = 2025-01-01\ntags = [\"test\"]\npin = true\n+++\n\n"
+        "# Pinned decision\n\nThis is old but pinned so it stays.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt is pinned.\n"
+    )
+
+    store.reindex()
+    archived = store.compact(max_age_days=0)
+    assert_eq("none archived", archived, 0)
+    assert_file_exists("still exists", str(sig_path))
+
+
+def test_compact_keeps_referenced_signal():
+    print("test_compact_keeps_referenced_signal:")
+    d = f"{TEST_DIR}/compact-referenced"
+    engram_dir = f"{d}/.engram"
+    store = engram.EngramStore(engram_dir)
+    store.init()
+
+    # Write two old signals — one references the other via supersedes
+    old_path = Path(engram_dir) / "decisions" / "old-referenced.md"
+    old_path.write_text(
+        "+++\ndate = 2025-01-01\ntags = [\"test\"]\n+++\n\n"
+        "# Old referenced\n\nThis is old but referenced by another signal.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt is referenced.\n"
+    )
+
+    newer_path = Path(engram_dir) / "decisions" / "newer-decision.md"
+    newer_path.write_text(
+        "+++\ndate = 2025-02-01\ntags = [\"test\"]\nsupersedes = \"old-referenced\"\n+++\n\n"
+        "# Newer decision\n\nThis supersedes the old one.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt replaces old.\n"
+    )
+
+    store.reindex()
+    archived = store.compact(max_age_days=0)
+    # newer-decision gets archived (it's old, not referenced)
+    # old-referenced stays (it's a target of a supersedes link)
+    assert_eq("one archived (unreferenced only)", archived, 1)
+    assert_file_exists("old-referenced still exists", str(old_path))
+    assert_eq("newer-decision archived", newer_path.is_file(), False)
+
+
+def test_compact_brief_excludes_archived():
+    print("test_compact_brief_excludes_archived:")
+    d = f"{TEST_DIR}/compact-brief"
+    engram_dir = f"{d}/.engram"
+    store = engram.EngramStore(engram_dir)
+    store.init()
+
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+
+    # Write a signal that will stay active (use tomorrow to survive age=0 cutoff)
+    active_path = Path(engram_dir) / "decisions" / "active-decision.md"
+    active_path.write_text(
+        f"+++\ndate = {tomorrow}\ntags = [\"test\"]\n+++\n\n"
+        "# Active decision\n\nThis stays in the brief.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt is active.\n"
+    )
+
+    # Write an old signal that will be archived
+    old_path = Path(engram_dir) / "decisions" / "archived-decision.md"
+    old_path.write_text(
+        "+++\ndate = 2025-01-01\ntags = [\"test\"]\n+++\n\n"
+        "# Archived decision\n\nThis should not appear in brief.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nIt is old.\n"
+    )
+
+    # Compact, then reindex and brief
+    store.reindex()
+    store.compact(max_age_days=0)
+    store.reindex()
+    store.brief()
+
+    brief_text = Path(engram_dir, "brief.md").read_text()
+    assert_contains("has active", brief_text, "Active decision")
+    assert_not_contains("no archived", brief_text, "Archived decision")
+
+
+# ── Section depth validation tests ─────────────────────────────────
+
+def test_validate_empty_rationale_section():
+    print("test_validate_empty_rationale_section:")
+    sig = engram.Signal.from_text(
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
+        "# Decision with empty rationale\n\nThis is a test decision.\n\n"
+        "## Alternatives\n- Option A\n\n"
+        "## Rationale\n\n"
+    )
+    ok, errors = sig.validate()
+    assert_eq("fails validation", ok, False)
+    assert_contains("mentions empty section", errors, "empty")
+
+
+def test_validate_empty_alternatives_section():
+    print("test_validate_empty_alternatives_section:")
+    sig = engram.Signal.from_text(
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
+        "# Decision with empty alternatives\n\nThis is a test decision.\n\n"
+        "## Alternatives\n\n"
+        "## Rationale\nChosen for good reasons.\n"
+    )
+    ok, errors = sig.validate()
+    assert_eq("fails validation", ok, False)
+    assert_contains("mentions empty section", errors, "empty")
+
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -2451,6 +2616,13 @@ if __name__ == "__main__":
         test_created_at_from_frontmatter,
         test_validate_missing_sections,
         test_validate_partial_sections,
+        test_compact_archives_old_signal,
+        test_compact_keeps_recent_signal,
+        test_compact_keeps_pinned_signal,
+        test_compact_keeps_referenced_signal,
+        test_compact_brief_excludes_archived,
+        test_validate_empty_rationale_section,
+        test_validate_empty_alternatives_section,
     ]
 
     for test in tests:
