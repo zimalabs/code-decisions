@@ -4,6 +4,7 @@
 Pure functions, no side effects at import time.
 Stdlib only: sqlite3, json, re, subprocess, pathlib, os, sys.
 """
+from __future__ import annotations
 
 import json
 import os
@@ -11,8 +12,9 @@ import re
 import sqlite3
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import TypedDict
 
 # Resolve schema.sql relative to this file
 ENGRAM_LIB_DIR = Path(__file__).resolve().parent
@@ -46,15 +48,31 @@ _SKIP_PATTERNS = re.compile(
 # Noise words for path_to_keywords
 _NOISE_WORDS = frozenset("src lib app index test spec the and is of to in for a an".split())
 
+# ── Type aliases ─────────────────────────────────────────────────────
+
+StrPath = str | Path
+
+
+class SignalMeta(TypedDict):
+    type: str
+    date: str
+    tags: str
+    source: str
+    supersedes: str
+    links: str
+    status: str
+
 
 # ── FTS5 check ───────────────────────────────────────────────────────
 
-def _check_fts5():
+def _check_fts5() -> bool:
     """Verify SQLite FTS5 module is available."""
     try:
         conn = sqlite3.connect(":memory:")
-        conn.execute("CREATE VIRTUAL TABLE _fts5_test USING fts5(x);")
-        conn.close()
+        try:
+            conn.execute("CREATE VIRTUAL TABLE _fts5_test USING fts5(x);")
+        finally:
+            conn.close()
     except sqlite3.OperationalError:
         print("engram: SQLite FTS5 module not available.", file=sys.stderr)
         print("engram: Install SQLite with FTS5 support:", file=sys.stderr)
@@ -67,7 +85,7 @@ def _check_fts5():
 
 # ── Config ───────────────────────────────────────────────────────────
 
-def _git_tracking_enabled(dir_path):
+def _git_tracking_enabled(dir_path: StrPath) -> bool:
     """Check if git tracking is explicitly enabled via config."""
     config = Path(dir_path) / "config"
     if not config.is_file():
@@ -80,7 +98,7 @@ def _git_tracking_enabled(dir_path):
 
 # ── Slug helpers ─────────────────────────────────────────────────────
 
-def _slugify(text):
+def _slugify(text: str) -> str:
     """Lowercase, replace non-alphanum with hyphens, collapse, trim, truncate to 50."""
     s = text.lower()
     s = re.sub(r"[^a-z0-9]", "-", s)
@@ -89,12 +107,12 @@ def _slugify(text):
     return s[:50]
 
 
-def _slug(filepath):
+def _slug(filepath: StrPath) -> str:
     """Extract slug from filepath (basename without .md)."""
     return Path(filepath).stem
 
 
-def _extract_excerpt(body):
+def _extract_excerpt(body: str) -> str:
     """First non-empty, non-heading line of body, truncated to 120 chars."""
     for line in body.splitlines():
         if line and not line.startswith("#"):
@@ -102,7 +120,7 @@ def _extract_excerpt(body):
     return ""
 
 
-def _normalize_tags(raw):
+def _normalize_tags(raw: str) -> str:
     """Convert YAML-style [a, b, c] to valid JSON ["a","b","c"]."""
     raw = raw.strip()
     if not raw or raw == "[]":
@@ -114,7 +132,7 @@ def _normalize_tags(raw):
     return json.dumps(tags)
 
 
-def _parse_links(s):
+def _parse_links(s: str) -> list[tuple[str, str]]:
     """Parse links: [related:foo, supersedes:bar] → list of (rel, target)."""
     s = s.strip().lstrip("[").rstrip("]")
     result = []
@@ -130,7 +148,7 @@ def _parse_links(s):
 
 # ── Frontmatter parser (shared) ─────────────────────────────────────
 
-def _parse_frontmatter(text):
+def _parse_frontmatter(text: str) -> tuple[SignalMeta, str, str]:
     """Parse markdown with YAML frontmatter.
 
     Returns (metadata_dict, title, body) where:
@@ -198,7 +216,7 @@ def _parse_frontmatter(text):
 
 # ── Signal validation ────────────────────────────────────────────────
 
-def _validate_signal(filepath):
+def _validate_signal(filepath: StrPath) -> tuple[bool, str]:
     """Validate a signal file. Returns (ok, errors_string)."""
     text = Path(filepath).read_text(errors="replace")
     errors = []
@@ -265,7 +283,7 @@ def _validate_signal(filepath):
 
 # ── Commit classification ────────────────────────────────────────────
 
-def _is_decision_commit(subject, commit_hash):
+def _is_decision_commit(subject: str, commit_hash: str) -> bool:
     """Check if a commit represents a decision worth capturing."""
     lower = subject.lower()
 
@@ -301,7 +319,7 @@ def _is_decision_commit(subject, commit_hash):
 
 # ── Init ─────────────────────────────────────────────────────────────
 
-def engram_init(dir_path):
+def engram_init(dir_path: StrPath) -> bool:
     """Initialize .engram directory structure and index.db."""
     if not _check_fts5():
         return False
@@ -325,14 +343,16 @@ def engram_init(dir_path):
     db_path = d / "index.db"
     if not db_path.is_file():
         conn = sqlite3.connect(str(db_path))
-        conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
-        conn.close()
+        try:
+            conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
+        finally:
+            conn.close()
     return True
 
 
 # ── Index file ───────────────────────────────────────────────────────
 
-def _index_file(dir_path, filepath, private=0):
+def _index_file(dir_path: StrPath, filepath: StrPath, private: int = 0) -> None:
     """Parse a signal markdown file and insert into index.db."""
     text = Path(filepath).read_text(errors="replace")
     meta, title, body = _parse_frontmatter(text)
@@ -360,46 +380,50 @@ def _index_file(dir_path, filepath, private=0):
 
     db_path = Path(dir_path) / "index.db"
     conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (sig_type, title, content, meta["tags"], meta["source"], meta["date"],
-         str(filepath), private, excerpt, slug, meta["status"]),
-    )
-
-    # Insert supersedes link
-    if meta["supersedes"]:
+    try:
         conn.execute(
-            "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, 'supersedes')",
-            (slug, meta["supersedes"]),
+            "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (sig_type, title, content, meta["tags"], meta["source"], meta["date"],
+             str(filepath), private, excerpt, slug, meta["status"]),
         )
 
-    # Insert other links
-    if meta["links"]:
-        for rel, target in _parse_links(meta["links"]):
+        # Insert supersedes link
+        if meta["supersedes"]:
             conn.execute(
-                "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, ?)",
-                (slug, target, rel),
+                "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, 'supersedes')",
+                (slug, meta["supersedes"]),
             )
 
-    conn.commit()
-    conn.close()
+        # Insert other links
+        if meta["links"]:
+            for rel, target in _parse_links(meta["links"]):
+                conn.execute(
+                    "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, ?)",
+                    (slug, target, rel),
+                )
+
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Reindex ──────────────────────────────────────────────────────────
 
-def engram_reindex(dir_path):
+def engram_reindex(dir_path: StrPath) -> None:
     """Destructive rebuild of index.db from signal files. Preserves meta table."""
     d = Path(dir_path)
     db_path = d / "index.db"
 
     # Preserve meta table data
-    meta_backup = []
+    meta_backup: list[tuple[str, str]] = []
     if db_path.is_file():
         try:
             conn = sqlite3.connect(str(db_path))
-            meta_backup = conn.execute("SELECT key, value FROM meta").fetchall()
-            conn.close()
+            try:
+                meta_backup = conn.execute("SELECT key, value FROM meta").fetchall()
+            finally:
+                conn.close()
         except sqlite3.Error:
             pass
 
@@ -407,13 +431,15 @@ def engram_reindex(dir_path):
     if db_path.is_file():
         db_path.unlink()
     conn = sqlite3.connect(str(db_path))
-    conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
+    try:
+        conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
 
-    # Restore meta data
-    for key, value in meta_backup:
-        conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
+        # Restore meta data
+        for key, value in meta_backup:
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
+    finally:
+        conn.close()
 
     # Index public signals
     decisions_dir = d / "decisions"
@@ -430,7 +456,7 @@ def engram_reindex(dir_path):
 
 # ── Commit ingestion ─────────────────────────────────────────────────
 
-def engram_ingest_commits(dir_path):
+def engram_ingest_commits(dir_path: StrPath) -> None:
     """Ingest decision-worthy commits as signal files."""
     if not _git_tracking_enabled(dir_path):
         return
@@ -449,10 +475,12 @@ def engram_ingest_commits(dir_path):
     if db_path.is_file():
         try:
             conn = sqlite3.connect(str(db_path))
-            row = conn.execute("SELECT value FROM meta WHERE key = 'last_commit'").fetchone()
-            if row:
-                last_commit = row[0]
-            conn.close()
+            try:
+                row = conn.execute("SELECT value FROM meta WHERE key = 'last_commit'").fetchone()
+                if row:
+                    last_commit = row[0]
+            finally:
+                conn.close()
         except sqlite3.Error:
             pass
 
@@ -552,19 +580,21 @@ def engram_ingest_commits(dir_path):
     if new_head:
         try:
             conn = sqlite3.connect(str(db_path))
-            conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_commit', ?)",
-                (new_head,),
-            )
-            conn.commit()
-            conn.close()
+            try:
+                conn.execute(
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_commit', ?)",
+                    (new_head,),
+                )
+                conn.commit()
+            finally:
+                conn.close()
         except sqlite3.Error:
             pass
 
 
 # ── Plan ingestion ───────────────────────────────────────────────────
 
-def engram_ingest_plans(dir_path):
+def engram_ingest_plans(dir_path: StrPath) -> None:
     """Ingest Claude Code plan files as decision signals."""
     d = Path(dir_path)
     db_path = d / "index.db"
@@ -594,10 +624,12 @@ def engram_ingest_plans(dir_path):
     if db_path.is_file():
         try:
             conn = sqlite3.connect(str(db_path))
-            row = conn.execute("SELECT value FROM meta WHERE key = 'last_plan_ingest'").fetchone()
-            if row:
-                last_ingest = row[0]
-            conn.close()
+            try:
+                row = conn.execute("SELECT value FROM meta WHERE key = 'last_plan_ingest'").fetchone()
+                if row:
+                    last_ingest = row[0]
+            finally:
+                conn.close()
         except sqlite3.Error:
             pass
 
@@ -662,23 +694,24 @@ def engram_ingest_plans(dir_path):
         filepath.write_text(signal)
 
     # Update last_plan_ingest timestamp
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_plan_ingest', ?)",
-            (now,),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_plan_ingest', ?)",
+                (now,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
     except sqlite3.Error:
         pass
 
 
 # ── Brief generation ─────────────────────────────────────────────────
 
-def engram_brief(dir_path):
+def engram_brief(dir_path: StrPath) -> None:
     """Generate brief.md summary of decisions."""
     d = Path(dir_path)
     db_path = d / "index.db"
@@ -686,104 +719,104 @@ def engram_brief(dir_path):
         return
 
     conn = sqlite3.connect(str(db_path))
+    try:
+        # Build superseded set
+        superseded_slugs = [
+            row[0] for row in
+            conn.execute("SELECT target_file FROM links WHERE rel_type='supersedes'").fetchall()
+        ]
 
-    # Build superseded set
-    superseded_slugs = [
-        row[0] for row in
-        conn.execute("SELECT target_file FROM links WHERE rel_type='supersedes'").fetchall()
-    ]
+        superseded_count = len(superseded_slugs)
 
-    superseded_count = len(superseded_slugs)
+        # Build SQL exclusion for superseded slugs
+        superseded_clause = ""
+        superseded_params: list[str] = []
+        if superseded_slugs:
+            placeholders = ",".join("?" * len(superseded_slugs))
+            superseded_clause = f"AND slug NOT IN ({placeholders})"
+            superseded_params = superseded_slugs
 
-    # Build SQL exclusion for superseded slugs
-    superseded_clause = ""
-    superseded_params = []
-    if superseded_slugs:
-        placeholders = ",".join("?" * len(superseded_slugs))
-        superseded_clause = f"AND slug NOT IN ({placeholders})"
-        superseded_params = superseded_slugs
+        # Counts
+        decision_count = conn.execute(
+            "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='active'"
+        ).fetchone()[0]
 
-    # Counts
-    decision_count = conn.execute(
-        "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='active'"
-    ).fetchone()[0]
+        invalid_count = conn.execute(
+            "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='invalid'"
+        ).fetchone()[0]
 
-    invalid_count = conn.execute(
-        "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='invalid'"
-    ).fetchone()[0]
+        withdrawn_count = conn.execute(
+            "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn'"
+        ).fetchone()[0]
 
-    withdrawn_count = conn.execute(
-        "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn'"
-    ).fetchone()[0]
+        brief = f"# Decision Context ({decision_count} decisions)"
 
-    brief = f"# Decision Context ({decision_count} decisions)"
-
-    # Check distinct tag count
-    distinct_tags = conn.execute(
-        f"SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j "
-        f"WHERE signals.type='decision' AND signals.private=0 AND signals.status='active' "
-        f"AND signals.tags != '[]' {superseded_clause}",
-        superseded_params,
-    ).fetchone()[0]
-
-    if distinct_tags >= 3:
-        # Tag-grouped decisions
-        rows = conn.execute(
-            f"SELECT COALESCE(json_extract(s.tags, '$[0]'), '') as primary_tag, "
-            f"GROUP_CONCAT('- [' || s.date || '] ' || s.title || "
-            f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
-            f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END"
-            f", CHAR(10)) "
-            f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
-            f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
-            f"GROUP BY primary_tag ORDER BY MAX(s.date) DESC LIMIT 15",
+        # Check distinct tag count
+        distinct_tags = conn.execute(
+            f"SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j "
+            f"WHERE signals.type='decision' AND signals.private=0 AND signals.status='active' "
+            f"AND signals.tags != '[]' {superseded_clause}",
             superseded_params,
-        ).fetchall()
+        ).fetchone()[0]
 
-        if rows:
-            brief += "\n\n## Recent Decisions"
-            for tag, entries in rows:
-                if not entries:
-                    continue
-                if tag and tag != "[]":
-                    brief += f"\n### {tag}\n{entries}"
-                else:
-                    brief += f"\n{entries}"
-    else:
-        # Chronological decisions
-        rows = conn.execute(
-            f"SELECT '- [' || s.date || '] ' || s.title || "
-            f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
-            f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END "
-            f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
-            f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
-            f"ORDER BY s.date DESC LIMIT 15",
-            superseded_params,
-        ).fetchall()
+        if distinct_tags >= 3:
+            # Tag-grouped decisions
+            rows = conn.execute(
+                f"SELECT COALESCE(json_extract(s.tags, '$[0]'), '') as primary_tag, "
+                f"GROUP_CONCAT('- [' || s.date || '] ' || s.title || "
+                f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
+                f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END"
+                f", CHAR(10)) "
+                f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
+                f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
+                f"GROUP BY primary_tag ORDER BY MAX(s.date) DESC LIMIT 15",
+                superseded_params,
+            ).fetchall()
 
-        if rows:
-            decisions_text = "\n".join(row[0] for row in rows)
-            brief += f"\n\n## Recent Decisions\n{decisions_text}"
+            if rows:
+                brief += "\n\n## Recent Decisions"
+                for tag, entries in rows:
+                    if not entries:
+                        continue
+                    if tag and tag != "[]":
+                        brief += f"\n### {tag}\n{entries}"
+                    else:
+                        brief += f"\n{entries}"
+        else:
+            # Chronological decisions
+            rows = conn.execute(
+                f"SELECT '- [' || s.date || '] ' || s.title || "
+                f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
+                f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END "
+                f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
+                f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
+                f"ORDER BY s.date DESC LIMIT 15",
+                superseded_params,
+            ).fetchall()
 
-    # Footer
-    private_count = conn.execute(
-        "SELECT COUNT(*) FROM signals WHERE private=1"
-    ).fetchone()[0]
+            if rows:
+                decisions_text = "\n".join(row[0] for row in rows)
+                brief += f"\n\n## Recent Decisions\n{decisions_text}"
 
-    footer_parts = []
-    if private_count > 0:
-        footer_parts.append(f"{private_count} private signal(s)")
-    if superseded_count > 0:
-        footer_parts.append(f"{superseded_count} superseded signal(s)")
-    if withdrawn_count > 0:
-        footer_parts.append(f"{withdrawn_count} withdrawn signal(s)")
-    if invalid_count > 0:
-        footer_parts.append(f"{invalid_count} signal(s) incomplete (missing rationale)")
+        # Footer
+        private_count = conn.execute(
+            "SELECT COUNT(*) FROM signals WHERE private=1"
+        ).fetchone()[0]
 
-    if footer_parts:
-        brief += f"\n\n*+ {', '.join(footer_parts)} not shown*"
+        footer_parts: list[str] = []
+        if private_count > 0:
+            footer_parts.append(f"{private_count} private signal(s)")
+        if superseded_count > 0:
+            footer_parts.append(f"{superseded_count} superseded signal(s)")
+        if withdrawn_count > 0:
+            footer_parts.append(f"{withdrawn_count} withdrawn signal(s)")
+        if invalid_count > 0:
+            footer_parts.append(f"{invalid_count} signal(s) incomplete (missing rationale)")
 
-    conn.close()
+        if footer_parts:
+            brief += f"\n\n*+ {', '.join(footer_parts)} not shown*"
+    finally:
+        conn.close()
 
     # Cap brief size
     max_lines = int(os.environ.get("ENGRAM_BRIEF_MAX_LINES", "50"))
@@ -797,7 +830,7 @@ def engram_brief(dir_path):
 
 # ── Path to keywords ────────────────────────────────────────────────
 
-def engram_path_to_keywords(filepath):
+def engram_path_to_keywords(filepath: str) -> str:
     """Extract search keywords from a file path."""
     if not filepath:
         return ""
@@ -822,7 +855,7 @@ def engram_path_to_keywords(filepath):
 
 # ── Query relevant signals ──────────────────────────────────────────
 
-def engram_query_relevant(dir_path, search_terms, limit=3):
+def engram_query_relevant(dir_path: StrPath, search_terms: str, limit: int = 3) -> str:
     """Search for signals matching keywords. Returns formatted string."""
     if not search_terms:
         return ""
@@ -839,17 +872,19 @@ def engram_query_relevant(dir_path, search_terms, limit=3):
 
     conn = sqlite3.connect(str(db_path))
     try:
-        rows = conn.execute(
-            "SELECT s.date, s.title, s.excerpt "
-            "FROM signals_fts fts JOIN signals s ON s.id = fts.rowid "
-            "WHERE signals_fts MATCH ? AND s.private = 0 AND s.status = 'active' "
-            "AND s.slug NOT IN (SELECT target_file FROM links WHERE rel_type = 'supersedes') "
-            "ORDER BY rank LIMIT ?",
-            (fts_query, limit),
-        ).fetchall()
-    except sqlite3.Error:
-        rows = []
-    conn.close()
+        try:
+            rows = conn.execute(
+                "SELECT s.date, s.title, s.excerpt "
+                "FROM signals_fts fts JOIN signals s ON s.id = fts.rowid "
+                "WHERE signals_fts MATCH ? AND s.private = 0 AND s.status = 'active' "
+                "AND s.slug NOT IN (SELECT target_file FROM links WHERE rel_type = 'supersedes') "
+                "ORDER BY rank LIMIT ?",
+                (fts_query, limit),
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+    finally:
+        conn.close()
 
     if not rows:
         return ""
@@ -868,28 +903,28 @@ def engram_query_relevant(dir_path, search_terms, limit=3):
 
 # ── Tag summary ─────────────────────────────────────────────────────
 
-def engram_tag_summary(dir_path):
+def engram_tag_summary(dir_path: StrPath) -> str:
     """Return top topics summary string."""
     db_path = Path(dir_path) / "index.db"
     if not db_path.is_file():
         return ""
 
     conn = sqlite3.connect(str(db_path))
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM signals WHERE private=0"
+        ).fetchone()[0]
+        if total < 5:
+            return ""
 
-    total = conn.execute(
-        "SELECT COUNT(*) FROM signals WHERE private=0"
-    ).fetchone()[0]
-    if total < 5:
+        rows = conn.execute(
+            "SELECT j.value AS tag, COUNT(*) AS cnt "
+            "FROM signals, json_each(signals.tags) j "
+            "WHERE signals.private = 0 AND signals.tags != '[]' "
+            "GROUP BY j.value ORDER BY cnt DESC LIMIT 8"
+        ).fetchall()
+    finally:
         conn.close()
-        return ""
-
-    rows = conn.execute(
-        "SELECT j.value AS tag, COUNT(*) AS cnt "
-        "FROM signals, json_each(signals.tags) j "
-        "WHERE signals.private = 0 AND signals.tags != '[]' "
-        "GROUP BY j.value ORDER BY cnt DESC LIMIT 8"
-    ).fetchall()
-    conn.close()
 
     if not rows:
         return ""
@@ -903,30 +938,32 @@ def engram_tag_summary(dir_path):
 
 # ── Find incomplete signals ─────────────────────────────────────────
 
-def engram_find_incomplete(dir_path, limit=5):
+def engram_find_incomplete(dir_path: StrPath, limit: int = 5) -> str:
     """Find signals with gaps. Returns pipe-delimited lines."""
     db_path = Path(dir_path) / "index.db"
     if not db_path.is_file():
         return ""
 
     conn = sqlite3.connect(str(db_path))
-    rows = conn.execute(
-        "SELECT s.slug, s.title, "
-        "CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END "
-        "|| CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
-        "|| CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END "
-        "AS gap_types "
-        "FROM signals s "
-        "LEFT JOIN links l ON l.source_file = s.slug "
-        "LEFT JOIN links l2 ON l2.target_file = s.slug "
-        "WHERE (s.tags = '[]' OR s.tags = '' "
-        "OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%') "
-        "OR (l.source_file IS NULL AND l2.target_file IS NULL)) "
-        "GROUP BY s.slug "
-        "ORDER BY s.date DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    conn.close()
+    try:
+        rows = conn.execute(
+            "SELECT s.slug, s.title, "
+            "CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END "
+            "|| CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
+            "|| CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END "
+            "AS gap_types "
+            "FROM signals s "
+            "LEFT JOIN links l ON l.source_file = s.slug "
+            "LEFT JOIN links l2 ON l2.target_file = s.slug "
+            "WHERE (s.tags = '[]' OR s.tags = '' "
+            "OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%') "
+            "OR (l.source_file IS NULL AND l2.target_file IS NULL)) "
+            "GROUP BY s.slug "
+            "ORDER BY s.date DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
 
     if not rows:
         return ""
@@ -941,7 +978,7 @@ def engram_find_incomplete(dir_path, limit=5):
 
 # ── Resync pipeline ─────────────────────────────────────────────────
 
-def engram_resync(dir_path):
+def engram_resync(dir_path: StrPath) -> None:
     """Full sync: ingest commits, ingest plans, reindex, generate brief."""
     engram_ingest_commits(dir_path)
     engram_ingest_plans(dir_path)
@@ -951,7 +988,7 @@ def engram_resync(dir_path):
 
 # ── Uncommitted signal summary ──────────────────────────────────────
 
-def engram_uncommitted_summary(dir_path):
+def engram_uncommitted_summary(dir_path: StrPath) -> str:
     """Report uncommitted signals if git tracking is enabled."""
     if not _git_tracking_enabled(dir_path):
         return ""
@@ -980,7 +1017,7 @@ def engram_uncommitted_summary(dir_path):
 
 # ── Validate content from stdin ──────────────────────────────────────
 
-def _validate_content_stdin():
+def _validate_content_stdin() -> str:
     """Validate signal content read from stdin. For pre-tool-use hook."""
     decoded = sys.stdin.read()
     errors = []
@@ -1044,7 +1081,7 @@ def _validate_content_stdin():
 
 # ── CLI dispatch ────────────────────────────────────────────────────
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python3 engram.py <command> [args...]", file=sys.stderr)
         sys.exit(1)
