@@ -1,5 +1,5 @@
 {
-  "description": "engram: decision capture + context injection via hooks — session lifecycle, code change nudges, signal validation, compaction safety, automatic context retrieval",
+  "description": "engram: decision capture + context injection via hooks — all deterministic command hooks, no LLM-dependent prompt hooks",
   "hooks": {
     "SessionStart": [
       {
@@ -40,12 +40,8 @@
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nWas this a significant code change (feature, architecture, refactor, deps) outside .engram/, tests, and docs?\n\nIf yes and no .engram/decisions/ file written yet this session: {\"ok\": true, \"reason\": \"Consider recording this decision with @engram:capture.\"}\nOtherwise: {\"ok\": true}"
-          },
-          {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-context.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.sh",
             "timeout": 5
           }
         ]
@@ -56,8 +52,9 @@
         "matcher": "Write|Edit",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nIf the file path is NOT inside .engram/decisions/ or .engram/_private/: {\"ok\": true}\n\nIf it IS an engram signal file, validate: (1) starts with --- frontmatter, (2) has date: YYYY-MM-DD, (3) has tags: with at least one tag, (4) has # Title after frontmatter, (5) has a lead paragraph >= 20 chars explaining why.\n\nAll valid: {\"ok\": true}\nAny invalid: {\"ok\": false, \"reason\": \"what failed and how to fix it\"}"
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use.sh",
+            "timeout": 5
           }
         ]
       }
@@ -67,8 +64,9 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nDid this subagent make architectural recommendations or design decisions?\n\nIf yes: {\"ok\": true, \"reason\": \"Subagent made recommendations — consider @engram:capture and @engram:query.\"}\nIf no: {\"ok\": true}"
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh",
+            "timeout": 5
           }
         ]
       }
@@ -77,10 +75,6 @@
       {
         "matcher": "*",
         "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nAre there decisions discussed in this conversation not yet recorded as .engram/decisions/ files?\n\nIf yes: {\"ok\": true, \"reason\": \"Unrecorded decisions found — consider @engram:capture before compaction.\"}\nIf no: {\"ok\": true}\n\nAlways ok:true — never block compaction."
-          },
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact.sh",
@@ -106,8 +100,9 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nMight any .engram/decisions/ files benefit from enrichment (missing tags, body, or rationale)?\n\nIf yes: {\"ok\": true, \"reason\": \"Some decisions may be incomplete — consider @engram:introspect.\"}\nIf no: {\"ok\": true}"
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/notification.sh",
+            "timeout": 5
           }
         ]
       }

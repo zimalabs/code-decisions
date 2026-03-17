@@ -1775,7 +1775,7 @@ EOF
 
   engram_reindex "$dir"
 
-  local hook_script="$SCRIPT_DIR/../hooks/post-tool-context.sh"
+  local hook_script="$SCRIPT_DIR/../hooks/post-tool-use.sh"
 
   # Test with matching file path
   local output
@@ -1797,11 +1797,11 @@ EOF
   fi
 
   # Test with .engram path — should skip
-  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":".engram/decisions/foo.md"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$-skip" bash "$hook_script" 2>/dev/null)
+  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":".engram/decisions/foo.md"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-ptu-skip-$$" bash "$hook_script" 2>/dev/null)
   assert_eq "skips .engram paths" "$output" "{}"
 
   # Test with test file — should skip
-  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":"tests/test_auth.rb"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-$$-skip2" bash "$hook_script" 2>/dev/null)
+  output=$(cd "$TEST_DIR/test-post-tool" && echo '{"tool_input":{"file_path":"tests/test_auth.rb"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-ptu-skip2-$$" bash "$hook_script" 2>/dev/null)
   assert_eq "skips test files" "$output" "{}"
 }
 
@@ -1897,6 +1897,77 @@ test_user_prompt_submit_hook() {
   assert_contains "suggest query for past decisions" "$output" "engram:query"
 }
 
+test_pre_tool_use_validation() {
+  echo "test_pre_tool_use_validation:"
+  local hook_script="$SCRIPT_DIR/../hooks/pre-tool-use.sh"
+
+  # Test: non-engram file — should pass through
+  local output
+  output=$(echo '{"tool_input":{"file_path":"src/app.rb","content":"hello"}}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+  assert_eq "non-engram file passes" "$output" "{}"
+
+  # Test: valid signal file
+  local valid_content='---\ndate: 2026-03-17\ntags: [architecture]\n---\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars.'
+  output=$(printf '{"tool_input":{"file_path":".engram/decisions/valid.md","content":"%s"}}' "$valid_content" | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+  assert_eq "valid signal passes" "$output" "{}"
+
+  # Test: signal missing tags
+  local no_tags_content='---\ndate: 2026-03-17\ntags: []\n---\n\n# No tags\n\nThis decision has empty tags which should fail.'
+  output=$(printf '{"tool_input":{"file_path":".engram/decisions/no-tags.md","content":"%s"}}' "$no_tags_content" | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+  assert_contains "empty tags blocked" "$output" '"ok": false'
+  assert_contains "tags error message" "$output" "tags"
+
+  # Test: signal missing frontmatter
+  local no_fm_content='# No frontmatter\n\nJust a plain file.'
+  output=$(printf '{"tool_input":{"file_path":".engram/decisions/no-fm.md","content":"%s"}}' "$no_fm_content" | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+  assert_contains "missing frontmatter blocked" "$output" '"ok": false'
+}
+
+test_notification_hook() {
+  echo "test_notification_hook:"
+  local dir="$TEST_DIR/test-notification/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Create an incomplete signal (missing tags, short body)
+  cat > "$dir/decisions/incomplete.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+---
+
+# Incomplete
+
+Short.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  local hook_script="$SCRIPT_DIR/../hooks/notification.sh"
+  local output
+  output=$(cd "$TEST_DIR/test-notification" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-notif-$$" bash "$hook_script" 2>/dev/null)
+  assert_contains "notification suggests enrichment" "$output" "incomplete"
+
+  # Test: no incomplete signals
+  rm "$dir/decisions/incomplete.md"
+  cat > "$dir/decisions/complete.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+tags: [test]
+---
+
+# Complete decision
+
+This decision has proper rationale and tags for validation.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+  output=$(cd "$TEST_DIR/test-notification" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-notif-clean-$$" bash "$hook_script" 2>/dev/null)
+  assert_eq "no nudge when all complete" "$output" "{}"
+}
+
 test_pre_compact_no_engram() {
   echo "test_pre_compact_no_engram:"
   local empty_dir="$TEST_DIR/test-pre-compact-empty"
@@ -1932,11 +2003,12 @@ test_hooks_json_structure() {
     fi
   done
 
-  # No empty prompts or commands
-  local empty_prompts
-  empty_prompts=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt == "" or .prompt == null))] | length' "$hooks_file")
-  assert_eq "no empty prompts" "$empty_prompts" "0"
+  # All hooks must be command hooks (no prompt hooks — they're flaky)
+  local prompt_count
+  prompt_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt")] | length' "$hooks_file")
+  assert_eq "no prompt hooks (all commands)" "$prompt_count" "0"
 
+  # No empty commands
   local empty_commands
   empty_commands=$(jq '[.hooks[][] | .hooks[] | select(.type == "command" and (.command == "" or .command == null))] | length' "$hooks_file")
   assert_eq "no empty commands" "$empty_commands" "0"
@@ -1954,77 +2026,14 @@ test_hooks_json_structure() {
   assert_contains "PostToolUse matcher has Edit" "$post_matcher" "Edit"
   assert_contains "PostToolUse matcher has MultiEdit" "$post_matcher" "MultiEdit"
 
-  # PostToolUse must have both prompt and command hooks
-  local post_hook_count
-  post_hook_count=$(jq '.hooks.PostToolUse[0].hooks | length' "$hooks_file")
-  assert_eq "PostToolUse has 2 hooks" "$post_hook_count" "2"
-  local post_has_command
-  post_has_command=$(jq '[.hooks.PostToolUse[0].hooks[] | select(.type == "command")] | length' "$hooks_file")
-  assert_eq "PostToolUse has command hook" "$post_has_command" "1"
-
-  # PreCompact must have both prompt and command hooks
-  local compact_hook_count
-  compact_hook_count=$(jq '.hooks.PreCompact[0].hooks | length' "$hooks_file")
-  assert_eq "PreCompact has 2 hooks" "$compact_hook_count" "2"
-  local compact_has_command
-  compact_has_command=$(jq '[.hooks.PreCompact[0].hooks[] | select(.type == "command")] | length' "$hooks_file")
-  assert_eq "PreCompact has command hook" "$compact_has_command" "1"
-}
-
-test_hooks_json_prompts() {
-  echo "--- test_hooks_json_prompts ---"
-  local hooks_file="$SCRIPT_DIR/../hooks/hooks.json"
-
-  # Extract all prompt hook texts
-  local prompts
-  prompts=$(jq -r '[.hooks[][] | .hooks[] | select(.type == "prompt") | .prompt] | .[]' "$hooks_file")
-
-  # 1. No prompt hook references systemMessage
-  if echo "$prompts" | grep -qi "systemMessage"; then
-    _fail "no systemMessage in prompt hooks" "found systemMessage reference"
-  else
-    _pass "no systemMessage in prompt hooks"
-  fi
-
-  # 2. No informal return language
-  if echo "$prompts" | grep -qi "return 'block'\|return 'approve'\|return 'allow'\|return 'deny'"; then
-    _fail "no informal return language" "found informal return language"
-  else
-    _pass "no informal return language"
-  fi
-
-  # 3. All prompt hooks reference "ok" field
-  local prompt_count
-  prompt_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt")] | length' "$hooks_file")
-  local ok_count
-  ok_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt | test("\"ok\"")))] | length' "$hooks_file")
-  assert_eq "all prompts reference ok field" "$ok_count" "$prompt_count"
-
-  # 4. All prompt hooks contain JSON instruction
-  local json_count
-  json_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt | test("JSON")))] | length' "$hooks_file")
-  assert_eq "all prompts have JSON instruction" "$json_count" "$prompt_count"
-
-  # 5. PostToolUse never contains "ok": false (advisory only)
-  local post_prompt
-  post_prompt=$(jq -r '.hooks.PostToolUse[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
-  assert_not_contains "PostToolUse is advisory only" "$post_prompt" '"ok": false'
-
-  # 7. Stop is a command hook (not prompt — prompt hooks are flaky for JSON validation)
-  local stop_has_command
-  stop_has_command=$(jq '[.hooks.Stop[0].hooks[] | select(.type == "command")] | length' "$hooks_file")
-  assert_eq "Stop has command hook" "$stop_has_command" "1"
-
-  # 8. PreToolUse contains both ok:true and ok:false
-  local pre_prompt
-  pre_prompt=$(jq -r '.hooks.PreToolUse[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
-  assert_contains "PreToolUse has ok:true" "$pre_prompt" '"ok": true'
-  assert_contains "PreToolUse has ok:false" "$pre_prompt" '"ok": false'
-
-  # 9. PreCompact never contains "ok": false
-  local compact_prompt
-  compact_prompt=$(jq -r '.hooks.PreCompact[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
-  assert_not_contains "PreCompact never blocks" "$compact_prompt" '"ok": false'
+  # All command hooks reference a .sh file
+  local all_commands
+  all_commands=$(jq -r '[.hooks[][] | .hooks[] | select(.type == "command") | .command] | .[]' "$hooks_file")
+  local total_commands
+  total_commands=$(echo "$all_commands" | wc -l | tr -d ' ')
+  local sh_commands
+  sh_commands=$(echo "$all_commands" | grep -c '\.sh' || echo "0")
+  assert_eq "all commands are .sh scripts" "$sh_commands" "$total_commands"
 }
 
 # ── Validation tests ─────────────────────────────────────────────────
@@ -2460,9 +2469,11 @@ test_stop_hook_no_engram
 echo ""
 test_user_prompt_submit_hook
 echo ""
-test_hooks_json_structure
+test_pre_tool_use_validation
 echo ""
-test_hooks_json_prompts
+test_notification_hook
+echo ""
+test_hooks_json_structure
 echo ""
 test_brief_max_lines
 echo ""
