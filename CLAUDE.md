@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Claude Code plugin that gives agents persistent decision memory. Decisions are git-tracked markdown files in `.engram/`. A derived SQLite index provides FTS5 search. No CLI — hooks handle everything automatically.
+Claude Code plugin that gives agents persistent decision memory. Decisions are markdown files in `.engram/`. A derived SQLite index provides FTS5 search. No CLI — hooks handle everything automatically. Git integration is opt-in via `.engram/config`.
 
 ## Commands
 
@@ -40,7 +40,7 @@ plugins/engram/
 ## Key Concepts
 
 - **Signals** = decision markdown files in `.engram/decisions/`
-- **Private signals** = same format, in `.engram/_private/` (git-ignored, excluded from brief)
+- **Private signals** = same format, in `.engram/_private/` (excluded from brief and context)
 - **index.db** = derived SQLite database, rebuilt from files every session. Safe to delete.
 - **brief.md** = generated summary injected into agent context. Public signals only.
 
@@ -58,7 +58,7 @@ engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brie
 
 1. **Markdown is source of truth.** `index.db` is derived. Never store data only in SQLite.
 2. **Append-only signals.** Don't delete or overwrite signal files. Write new ones.
-3. **Directory = privacy.** `_private/` path means git-ignored + excluded from brief. No config flags.
+3. **Directory = privacy.** `_private/` path means excluded from brief and context injection. No config flags.
 4. **No CLI.** Capture via Write tool, query via `@engram:query` skill, everything else via hooks.
 5. **Pure functions in lib.sh.** No side effects at source time. Every function takes `dir` as first arg.
 

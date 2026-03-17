@@ -82,6 +82,12 @@ assert_file_count() {
   fi
 }
 
+# ── Helper: enable git tracking ───────────────────────────────────
+
+_enable_git_tracking() {
+  echo "git_tracking=true" > "$1/config"
+}
+
 # ── Helper: create a test git repo ────────────────────────────────
 
 _create_test_repo() {
@@ -146,15 +152,14 @@ test_init() {
 
   assert_dir_exists "decisions dir" "$dir/decisions"
   assert_dir_exists "_private dir" "$dir/_private"
-  assert_file_exists "gitignore" "$dir/.gitignore"
   assert_file_exists "index.db" "$dir/index.db"
 
-  # Verify gitignore content
-  local gitignore
-  gitignore=$(cat "$dir/.gitignore")
-  assert_contains "gitignore contains index.db" "$gitignore" "index.db"
-  assert_contains "gitignore contains brief.md" "$gitignore" "brief.md"
-  assert_contains "gitignore contains _private/" "$gitignore" "_private/"
+  # No .gitignore by default (git tracking is opt-in)
+  if [ ! -f "$dir/.gitignore" ]; then
+    _pass "no gitignore by default"
+  else
+    _fail "no gitignore by default" "file exists"
+  fi
 
   # Idempotent: run again, no error
   engram_init "$dir"
@@ -176,11 +181,17 @@ test_init_upgrade_gitignore() {
   local dir="$TEST_DIR/test-upgrade-gitignore/.engram"
 
   mkdir -p "$dir"
-  # Create old-style .gitignore without _private/ or brief.md
+  # Create old-style .gitignore without _private/ or brief.md (simulates existing user)
   echo "index.db" > "$dir/.gitignore"
 
   source "$LIB"
   engram_init "$dir"
+
+  # Migration should auto-enable git tracking
+  assert_file_exists "config created by migration" "$dir/config"
+  local config
+  config=$(cat "$dir/config")
+  assert_contains "config has git_tracking" "$config" "git_tracking=true"
 
   local gitignore
   gitignore=$(cat "$dir/.gitignore")
@@ -331,6 +342,7 @@ test_ingest_commits() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
 
   # Should have 3 decision files (feat, refactor, migrate) out of 7 commits
@@ -369,6 +381,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
 
   # Should have 2 decision files
@@ -403,6 +416,7 @@ test_ingest_dedup() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
 
   # Ingest twice
   engram_ingest_commits "$dir"
@@ -434,6 +448,7 @@ test_ingest_manual_signal_suppresses() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
 
   # Pre-create a manual signal with the same slug auto-ingest would use
   cat > "$dir/decisions/feat-add-widget.md" << 'EOF'
@@ -477,6 +492,7 @@ test_ingest_private_signal_suppresses() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
 
   # Pre-create a private signal with the same slug
   cat > "$dir/_private/feat-switch-to-redis-for-caching.md" << 'EOF'
@@ -517,6 +533,7 @@ test_ingest_no_manual_still_creates() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
 
   # Auto-ingest should create the signal when no manual signal exists
@@ -554,6 +571,7 @@ test_ingest_brownfield() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
 
   # Brownfield scans last 50 commits. Of those 50, 40 are feat (decision) and 10 are fix (skip).
@@ -787,6 +805,7 @@ test_meta_preserved() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
 
   # Verify last_commit is stored
@@ -823,6 +842,7 @@ test_incremental_ingest() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
 
   local first_count
@@ -1009,6 +1029,7 @@ test_uncommitted_summary() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
 
   # Write an uncommitted signal file
   cat > "$dir/decisions/test-uncommitted.md" << 'EOF'
@@ -1080,6 +1101,7 @@ test_session_end_output() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   # Ingest + commit .engram so it's clean
   engram_ingest_commits "$dir"
   engram_reindex "$dir"
@@ -2158,6 +2180,7 @@ test_ingest_bodyless_commit_invalid() {
   local dir="$repo_dir/.engram"
   source "$LIB"
   engram_init "$dir"
+  _enable_git_tracking "$dir"
   engram_ingest_commits "$dir"
   engram_reindex "$dir" 2>/dev/null
 
@@ -2171,6 +2194,116 @@ test_ingest_bodyless_commit_invalid() {
   local brief
   brief=$(cat "$dir/brief.md")
   assert_not_contains "brief excludes bodyless commit" "$brief" "add feature without body"
+
+  cd "$SCRIPT_DIR"
+}
+
+# ── Git opt-in tests ─────────────────────────────────────────────────
+
+test_git_tracking_config() {
+  echo "test_git_tracking_config:"
+  local dir="$TEST_DIR/test-git-config/.engram"
+
+  mkdir -p "$dir"
+  source "$LIB"
+
+  # Not enabled by default
+  if _git_tracking_enabled "$dir"; then
+    _fail "disabled by default" "returned true"
+  else
+    _pass "disabled by default"
+  fi
+
+  # Enable it
+  _enable_git_tracking "$dir"
+  if _git_tracking_enabled "$dir"; then
+    _pass "enabled after config"
+  else
+    _fail "enabled after config" "returned false"
+  fi
+
+  # Wrong value
+  echo "git_tracking=false" > "$dir/config"
+  if _git_tracking_enabled "$dir"; then
+    _fail "false value not enabled" "returned true"
+  else
+    _pass "false value not enabled"
+  fi
+}
+
+test_init_no_gitignore_by_default() {
+  echo "test_init_no_gitignore_by_default:"
+  local dir="$TEST_DIR/test-no-gitignore/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  if [ ! -f "$dir/.gitignore" ]; then
+    _pass "no gitignore created"
+  else
+    _fail "no gitignore created" "file exists"
+  fi
+
+  if [ ! -f "$dir/config" ]; then
+    _pass "no config created"
+  else
+    _fail "no config created" "file exists"
+  fi
+}
+
+test_init_gitignore_with_git_tracking() {
+  echo "test_init_gitignore_with_git_tracking:"
+  local dir="$TEST_DIR/test-gitignore-enabled/.engram"
+
+  mkdir -p "$dir"
+  source "$LIB"
+
+  # Enable git tracking before init
+  _enable_git_tracking "$dir"
+  engram_init "$dir"
+
+  assert_file_exists "gitignore created" "$dir/.gitignore"
+  local gitignore
+  gitignore=$(cat "$dir/.gitignore")
+  assert_contains "gitignore has index.db" "$gitignore" "index.db"
+  assert_contains "gitignore has brief.md" "$gitignore" "brief.md"
+  assert_contains "gitignore has _private/" "$gitignore" "_private/"
+  assert_contains "gitignore has config" "$gitignore" "config"
+}
+
+test_init_migration_auto_enables_git() {
+  echo "test_init_migration_auto_enables_git:"
+  local dir="$TEST_DIR/test-migration-auto/.engram"
+
+  mkdir -p "$dir"
+  # Simulate existing user: has .gitignore but no config
+  printf 'index.db\nbrief.md\n_private/\n' > "$dir/.gitignore"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  assert_file_exists "config created" "$dir/config"
+  local config
+  config=$(cat "$dir/config")
+  assert_contains "git tracking auto-enabled" "$config" "git_tracking=true"
+}
+
+test_ingest_noop_without_git_tracking() {
+  echo "test_ingest_noop_without_git_tracking:"
+  local repo_dir="$TEST_DIR/test-ingest-noop-repo"
+
+  _create_test_repo_mixed "$repo_dir"
+
+  local dir="$repo_dir/.engram"
+  source "$LIB"
+  engram_init "$dir"
+
+  # Do NOT enable git tracking — ingest should be a no-op
+  engram_ingest_commits "$dir"
+
+  local file_count
+  file_count=$(find "$dir/decisions" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+  assert_eq "no signals without git tracking" "$file_count" "0"
 
   cd "$SCRIPT_DIR"
 }
@@ -2291,6 +2424,16 @@ echo ""
 test_brief_excludes_invalid
 echo ""
 test_ingest_bodyless_commit_invalid
+echo ""
+test_git_tracking_config
+echo ""
+test_init_no_gitignore_by_default
+echo ""
+test_init_gitignore_with_git_tracking
+echo ""
+test_init_migration_auto_enables_git
+echo ""
+test_ingest_noop_without_git_tracking
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

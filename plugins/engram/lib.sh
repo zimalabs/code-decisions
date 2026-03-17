@@ -20,6 +20,13 @@ _check_fts5() {
   fi
 }
 
+# ── Config ────────────────────────────────────────────────────────────
+
+_git_tracking_enabled() {
+  local dir="$1"
+  [ -f "$dir/config" ] && grep -qx 'git_tracking=true' "$dir/config"
+}
+
 # ── Migration ─────────────────────────────────────────────────────────
 
 _migrate_signals_to_decisions() {
@@ -65,13 +72,23 @@ engram_init() {
   _migrate_signals_to_decisions "$dir"
   mkdir -p "$dir"/decisions
   mkdir -p "$dir"/_private
-  if [ ! -f "$dir/.gitignore" ]; then
-    printf 'index.db\nbrief.md\n_private/\n' > "$dir/.gitignore"
-  else
-    for entry in '_private/' 'brief.md'; do
-      grep -qx "$entry" "$dir/.gitignore" || echo "$entry" >> "$dir/.gitignore"
-    done
+
+  # Migration: existing .gitignore without config → auto-enable git tracking
+  if [ -f "$dir/.gitignore" ] && [ ! -f "$dir/config" ]; then
+    echo "git_tracking=true" > "$dir/config"
   fi
+
+  # Only manage .gitignore when git tracking is enabled
+  if _git_tracking_enabled "$dir"; then
+    if [ ! -f "$dir/.gitignore" ]; then
+      printf 'index.db\nbrief.md\n_private/\nconfig\n' > "$dir/.gitignore"
+    else
+      for entry in '_private/' 'brief.md' 'config'; do
+        grep -qx "$entry" "$dir/.gitignore" || echo "$entry" >> "$dir/.gitignore"
+      done
+    fi
+  fi
+
   if [ ! -f "$dir/index.db" ]; then
     sqlite3 "$dir/index.db" < "$ENGRAM_SCHEMA_FILE"
   fi
@@ -268,6 +285,9 @@ _is_decision_commit() {
 
 engram_ingest_commits() {
   local dir="$1"
+
+  # Git tracking must be explicitly enabled
+  _git_tracking_enabled "$dir" || return 0
 
   # Must be in a git repo
   git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
@@ -805,6 +825,10 @@ engram_tag_summary() {
 
 engram_uncommitted_summary() {
   local dir="$1"
+
+  # Git tracking must be explicitly enabled
+  _git_tracking_enabled "$dir" || return 0
+
   git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
 
   local uncommitted

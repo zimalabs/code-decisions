@@ -60,7 +60,7 @@ You have a persistent decision store via engram (.engram/ directory).
 When you make a significant decision, write a signal file:
   Write .engram/decisions/{slug}.md  (use the decision schema)
 
-For PRIVATE signals (sensitive, never git-tracked or auto-sent to API):
+For PRIVATE signals (sensitive, excluded from brief and context):
   Write .engram/_private/{slug}.md
 
 To query past signals:

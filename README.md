@@ -2,9 +2,9 @@
 
 # engram
 
-**Decision memory for AI agents.** Git-tracked, zero-config, no vendor lock-in.
+**Structured decision memory for AI agents.** Auto-capture, search, and evolution tracking. Privacy first.
 
-A Claude Code plugin that gives your agents persistent memory of decisions. Signals auto-accumulate from git commits, are stored as markdown, and injected into every session. No CLI. No commands to learn. No manual steps.
+A Claude Code plugin that gives your agents persistent memory of decisions. Signals are stored as markdown, indexed for full-text search, and injected into every session. No CLI. No commands to learn. No manual steps.
 
 ## Install
 
@@ -32,9 +32,9 @@ claude plugin install engram@zimalabs --scope project
 
 SessionStart hook fires:
 1. Creates `.engram/decisions/` and `.engram/_private/` if missing
-2. Ingests last 50 git commits as decision signals (brownfield bootstrap)
-3. Ingests any Claude plan files with `## Context` sections
-4. Builds `index.db` (derived SQLite index, git-ignored)
+2. Ingests any Claude plan files with `## Context` sections
+3. If git tracking is enabled: ingests last 50 git commits as decision signals (brownfield bootstrap)
+4. Builds `index.db` (derived SQLite index)
 5. Generates `brief.md`
 6. Injects brief + behavioral instructions into agent context
 
@@ -77,21 +77,10 @@ When the agent needs past decisions:
 ### Session ends
 
 SessionEnd hook fires:
-1. Ingests new git commits since last ingest
-2. Ingests modified Claude plan files
+1. Ingests modified Claude plan files
+2. If git tracking is enabled: ingests new git commits since last ingest
 3. Rebuilds `index.db`
 4. Regenerates `brief.md`
-
-### Next session starts
-
-SessionStart hook catches ALL changes — commits from VS Code, terminal, CI, other developers — via `git log`. The agent never has stale context.
-
-| Source | How engram catches it | When |
-|---|---|---|
-| VS Code / terminal commits | `git log` at session-start | Next session |
-| CI auto-commits | `git log` at session-start | Next session |
-| Other developer's commits | `git log` after `git pull` | Next session after pull |
-| Manual signal files | Developer writes `.engram/` file + commits | Next session after commit |
 
 ## Decision Signals
 
@@ -101,7 +90,6 @@ File: `.engram/decisions/{slug}.md`
 ---
 date: 2026-03-10
 tags: [api, framework]
-source: git:a3f2b1c
 ---
 
 # Use FastAPI over Django
@@ -253,9 +241,32 @@ All hooks are advisory or self-correcting — they guide the agent without inter
 
 Reviewers see **why** alongside **what**. Decision reasoning is part of the code review.
 
+## Git Integration (Optional)
+
+By default, engram works standalone — no git required. To enable git commit ingestion and `.gitignore` management:
+
+```sh
+echo 'git_tracking=true' > .engram/config
+```
+
+With git tracking enabled:
+- Commits matching decision patterns (`feat:`, `refactor:`, dependency changes) are auto-ingested as signals with `source: git:<hash>`
+- `.engram/.gitignore` is created/maintained to ignore `index.db`, `brief.md`, `_private/`, and `config`
+- Uncommitted signals are reported in the session banner
+- Signals show up in PRs alongside the code they describe
+
+**Existing users:** If you already have an `.engram/.gitignore`, git tracking is auto-enabled on next session start (zero breakage).
+
+| Source | How engram catches it | When |
+|---|---|---|
+| VS Code / terminal commits | `git log` at session-start | Next session |
+| CI auto-commits | `git log` at session-start | Next session |
+| Other developer's commits | `git log` after `git pull` | Next session after pull |
+| Manual signal files | Developer writes `.engram/` file | Next reindex |
+
 ## Private Signals
 
-For sensitive content that shouldn't be git-tracked or auto-sent to the Claude API, write to `.engram/_private/`:
+For sensitive content that should be excluded from brief and context, write to `.engram/_private/`:
 
 ```
 .engram/_private/competitor-deal.md
@@ -264,27 +275,27 @@ For sensitive content that shouldn't be git-tracked or auto-sent to the Claude A
 ```
 
 Private signals are:
-- **Git-ignored** — never committed or pushed
-- **Excluded from brief** — never auto-injected into agent context
+- **Excluded from brief and context** — never auto-injected into agent context
 - **Indexed and queryable** — available on-demand via `@engram:query`
 - **Same schema** — identical format to public signals
 
 The directory path IS the privacy boundary. No config, no encryption. Move a file between `decisions/` and `_private/` to change its visibility.
 
-Use private for: messaging content, CRM data, competitive intel, personnel decisions — anything you wouldn't put in a commit message.
+Use private for: messaging content, CRM data, competitive intel, personnel decisions — anything you wouldn't include in shared context.
 
 ## Architecture
 
 ```
 .engram/
-├── decisions/                          # git-tracked
+├── decisions/                          # decision signals
 │   ├── use-fastapi.md
 │   ├── jwt-auth.md
 │   └── redis-cluster.md
-├── _private/                         # git-IGNORED
+├── _private/                         # excluded from brief
 │   └── competitor-deal.md
-├── brief.md                          # git-IGNORED (derived)
-└── index.db                          # git-IGNORED (derived)
+├── config                            # optional (git_tracking=true)
+├── brief.md                          # derived
+└── index.db                          # derived
 ```
 
 The filename stem (without `.md`) serves as a stable ID for linking between signals.
@@ -296,20 +307,20 @@ Markdown files are the source of truth. `index.db` is derived — delete it anyt
 | | engram | claude-mem | supermemory |
 |---|---|---|---|
 | **What it stores** | Decisions | Key-value facts | Conversations, bookmarks, documents |
-| **Source of truth** | Markdown files in git | JSON in `~/.claude/` | Cloud database |
+| **Source of truth** | Markdown files (local) | JSON in `~/.claude/` | Cloud database |
 | **Search** | FTS5 (local SQLite) | Keyword match | Vector similarity (cloud) |
 | **Context injection** | Auto (session hooks) | Auto (system prompt) | Manual / API |
-| **Capture model** | Write tool + git ingest | CLI commands | Browser extension / API |
+| **Capture model** | Write tool + auto-capture | CLI commands | Browser extension / API |
 | **Runtime deps** | SQLite (ships with OS) | Node.js | Docker + cloud services |
 | **Privacy** | Local-only, git-ignored private tier | Local files | Cloud-hosted |
-| **Git integration** | Native (signals in PRs) | None | None |
+| **Git integration** | Optional (opt-in) | None | None |
 | **Cost** | Free | Free | Free tier + paid plans |
 | **Overhead** | Zero config, no commands | `mem add` / `mem search` | Setup + API keys |
 | **Self-hostable** | Yes (it's just files) | Yes | Yes (Docker) |
 
 ### Key differentiators
 
-**engram** is purpose-built for decision memory — the "why" behind code changes. Signals live in git alongside the code they describe, show up in PRs and diffs, and survive across tools, editors, and team members. Zero runtime dependencies beyond SQLite.
+**engram** is purpose-built for decision memory — the "why" behind code changes. Signals are plain markdown files that survive across tools, editors, and team members. With optional git tracking, they show up in PRs alongside code. Zero runtime dependencies beyond SQLite.
 
 **claude-mem** is a general-purpose key-value memory for Claude Code. Good for remembering user preferences and short facts. Lightweight, but memories are local to one machine and invisible to code review.
 

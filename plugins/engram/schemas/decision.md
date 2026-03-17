@@ -8,7 +8,7 @@ File: `.engram/decisions/{slug}.md`
 |---|---|---|
 | `date` | yes | ISO date (YYYY-MM-DD) |
 | `tags` | yes | Bracket list with at least one tag: `[topic1, topic2]` |
-| `source` | no | Origin: `git:<hash>`, `plan:<file>` (auto-set by hooks) |
+| `source` | no | Origin: `plan:<file>` (auto-set), `git:<hash>` (when git tracking enabled) |
 | `supersedes` | no | File stem of the signal this replaces |
 | `links` | no | Bracket list: `[related:stem, blocks:stem]` |
 

@@ -30,9 +30,9 @@ The canonical template and field definitions live in `${CLAUDE_PLUGIN_ROOT}/sche
 Signals have two visibility tiers based on directory path:
 
 - **Public** (default): `.engram/decisions/`
-  - Git-tracked, included in brief, visible in PRs
+  - Included in brief, visible in context
 - **Private**: `.engram/_private/`
-  - Git-ignored, excluded from brief, never auto-sent to Claude API
+  - Excluded from brief and context
 
 Use private for:
 - Messaging content (Slack conversations, emails)
@@ -69,5 +69,5 @@ links: [related:redis-cluster]
 - Keep individual signals focused on one thing
 - **Tags are required** — at least one tag (not empty `[]`)
 - **Lead paragraph is mandatory** — the first non-empty line after `# Title` must explain "why" and be at least 20 characters. Signals without this are marked invalid and excluded from the brief.
-- Source field is optional (hooks auto-set `git:<hash>` or `plan:<file>`)
+- Source field is optional (hooks auto-set `plan:<file>`, or `git:<hash>` when git tracking is enabled)
 - **Slug matching tip:** Use a slug that matches the commit subject so auto-ingest defers to your manual signal. E.g., if the commit will be "feat: switch to Redis for caching", name the signal `feat-switch-to-redis-for-caching.md`.

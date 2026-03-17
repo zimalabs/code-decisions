@@ -1,7 +1,7 @@
 {
   "name": "engram",
   "version": "0.3.0",
-  "description": "Decision memory for AI agents. Git-tracked, zero-config, no vendor lock-in.",
+  "description": "Structured decision memory for AI agents. Auto-capture, search, and evolution tracking. Zero-config, privacy-first.",
   "author": {
     "name": "Zima Labs",
     "url": "https://github.com/zimalabs"

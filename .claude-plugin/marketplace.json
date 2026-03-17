@@ -8,7 +8,7 @@
     {
       "name": "engram",
       "source": "./plugins/engram",
-      "description": "Decision memory for AI agents. Git-tracked, zero-config, no vendor lock-in."
+      "description": "Structured decision memory for AI agents. Auto-capture, search, and evolution tracking. Zero-config, privacy-first."
     }
   ]
 }
