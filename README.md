@@ -209,26 +209,49 @@ Power users can pass raw SQL queries:
 | `@engram:capture` | Guided signal creation — reads schema, validates frontmatter, writes the file |
 | `@engram:query` | Query past decisions in natural language or raw SQL (see [Querying](#querying)) |
 | `@engram:brief` | Regenerate and display the brief on demand — see updated context without restarting the session |
-| `@engram:reindex` | Rebuild `index.db` on demand after manual signal edits (no need to wait for next session) |
+| `@engram:resync` | Full sync: ingest commits + plans, rebuild index, regenerate brief |
 | `@engram:introspect` | Interactive gap-filling loop — adds missing tags, links, and body sections to existing decisions |
+| `@engram:backfill` | Autonomously enrich incomplete signals — adds missing tags, rationale, alternatives, and links |
+| `@engram:policies` | List all active policies with their levels, events, and descriptions |
 
-## Automation
+## Policy Engine
 
-Engram hooks run automatically — no configuration needed. Here's what happens behind the scenes:
+Engram enforces behavior through a centralized policy engine — no configuration needed. A single thin dispatcher (`dispatch.sh`) routes all hook events to `python3 -m engram policy <event>`, which evaluates 15 registered policies in priority order.
 
-| Hook | Event | Behavior |
+### Policy levels
+
+| Level | Behavior | Example |
 |---|---|---|
-| **Session lifecycle** | SessionStart / SessionEnd | Ingest commits + plans, rebuild index, generate brief, inject context |
-| **Stop enforcement** | Stop | Blocks if significant code changes lack a decision signal |
-| **PostToolUse nudge** | After Write/Edit | Advisory "consider recording this decision" (once per session) |
-| **Context injection** | After Write/Edit | Auto-injects related past decisions when editing code files |
-| **Signal validation** | Before Write/Edit | Validates frontmatter format on writes to `.engram/decisions/` |
-| **Subagent review** | SubagentStop | Suggests capture when subagents make architectural recommendations |
-| **Decision detection** | UserPromptSubmit | Detects decision language ("let's go with…") and suggests capture |
-| **Compaction safety** | PreCompact | Warns about unrecorded decisions before context is compacted |
-| **Enrichment nudge** | Notification | Suggests `@engram:introspect` when signals have missing sections |
+| **BLOCK** | Prevents the action | `commit-gate` blocks `git commit` without a decision signal |
+| **LIFECYCLE** | Side effects (init, resync) | `session-init` sets up `.engram/` and rebuilds the index |
+| **CONTEXT** | Injects information | `session-context` adds the brief to agent context |
+| **NUDGE** | Advisory suggestion | `capture-nudge` suggests recording a decision (once per session) |
 
-All hooks are advisory or self-correcting — they guide the agent without interrupting your workflow.
+### Active policies
+
+| Policy | Level | Event | What it does |
+|---|---|---|---|
+| `commit-gate` | BLOCK | PreToolUse | Blocks `git commit` if no decision signal written this session |
+| `delete-guard` | BLOCK | PreToolUse | Blocks deletion of `.engram/` signal files (append-only) |
+| `edit-guard` | BLOCK | PreToolUse | Blocks content removal from signal files via Edit tool |
+| `content-validation` | BLOCK | PreToolUse | Validates frontmatter and structure on Write to `.engram/decisions/` |
+| `session-init` | LIFECYCLE | SessionStart | Creates dirs, resyncs index, prints banner |
+| `session-cleanup` | LIFECYCLE | SessionEnd | Resyncs index at session end |
+| `push-resync` | LIFECYCLE | PostToolUse | Auto-resyncs after `git push` |
+| `session-context` | CONTEXT | SessionStart | Injects brief + behavioral instructions |
+| `related-context` | CONTEXT | PostToolUse | Injects related past decisions when editing code |
+| `subagent-context` | CONTEXT | SubagentStop | Injects brief into subagent results |
+| `compact-context` | CONTEXT | PreCompact | Regenerates brief before context compaction |
+| `capture-nudge` | NUDGE | PostToolUse | Suggests `@engram:capture` after code edits (once/session) |
+| `stop-nudge` | NUDGE | Stop | Nudges if no signals written this session |
+| `decision-language` | NUDGE | UserPromptSubmit | Detects "let's go with…" and suggests capture |
+| `incomplete-nudge` | NUDGE | Notification | Suggests `@engram:backfill` for incomplete signals |
+
+List active policies anytime with `@engram:policies`.
+
+### Adding a policy
+
+Write a condition function in `_policy_defs.py`, add a `Policy(...)` to `ALL_POLICIES`, add tests. No `hooks.json` changes needed — the dispatcher routes all events automatically.
 
 ## In a PR
 
@@ -302,6 +325,16 @@ Use private for: messaging content, CRM data, competitive intel, personnel decis
 The filename stem (without `.md`) serves as a stable ID for linking between signals.
 
 Markdown files are the source of truth. `index.db` is derived — delete it anytime, rebuilt from files on next session.
+
+### Hook architecture
+
+All hook events flow through a single dispatcher:
+
+```
+hooks.json → dispatch.sh <event> → python3 -m engram policy <event> → JSON response
+```
+
+The policy engine evaluates all registered policies for that event in priority order (BLOCK → LIFECYCLE → CONTEXT → NUDGE), with per-policy exception isolation and once-per-session dedup. Session state is unified in a single `/tmp/engram-policy-{session_id}/` directory.
 
 ## Comparison
 
