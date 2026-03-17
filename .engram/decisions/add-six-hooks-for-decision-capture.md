@@ -1,6 +1,7 @@
 +++
 date = 2026-03-16
 tags = ["hooks", "decision-capture", "plugin-api"]
+links = ["related:add-stop-hook-enforce-signals"]
 +++
 
 # Add 6 new hooks for in-the-moment decision capture

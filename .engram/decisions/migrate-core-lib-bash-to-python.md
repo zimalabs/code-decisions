@@ -1,6 +1,7 @@
 +++
 date = 2026-03-17
 tags = ["architecture", "migration"]
+links = ["related:migrate-engram-core-library-from-bash-to-python", "related:convert-engram-py-to-package"]
 +++
 
 # Migrate engram core library from bash to Python

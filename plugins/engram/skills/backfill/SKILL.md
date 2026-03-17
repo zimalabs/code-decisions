@@ -69,10 +69,16 @@ Use Edit tool: match the last line of the file and append the new sections.
 
 #### Missing Links
 
+Links use the format `"rel:slug"` where rel is `related` or `supersedes`. Example:
+
+```toml
+links = ["related:some-other-decision", "supersedes:old-decision"]
+```
+
 Check other signals for related decisions:
 
 ```bash
-sqlite3 -separator '|' .engram/index.db "SELECT file_stem, title FROM signals WHERE file_stem != '{current_stem}' ORDER BY date DESC LIMIT 20;"
+sqlite3 -separator '|' .engram/index.db "SELECT slug, title FROM signals WHERE slug != '{current_slug}' ORDER BY date DESC LIMIT 20;"
 ```
 
 If a clear relationship exists (same topic, one supersedes another), add a `links:` field:

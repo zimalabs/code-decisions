@@ -1,6 +1,7 @@
 +++
 date = 2026-03-16
 tags = ["hooks", "context-injection", "read-path"]
+links = ["related:add-six-hooks-for-decision-capture"]
 +++
 
 # Add automatic decision context injection to hooks

@@ -1,6 +1,7 @@
 +++
 date = 2026-03-17
 tags = ["skills", "conventions"]
+links = ["related:formalize-policy-layer"]
 +++
 
 # Standardize skill prefix from @ to / (slash command syntax)

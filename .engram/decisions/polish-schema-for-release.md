@@ -1,6 +1,7 @@
 +++
 date = 2026-03-17
 tags = ["schema", "cleanup", "release"]
+links = ["related:polish-schema-for-release-merge-valid-status-remov", "related:add-status-field"]
 +++
 
 # Polish engram data schema for release
