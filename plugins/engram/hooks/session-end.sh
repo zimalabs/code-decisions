@@ -5,11 +5,11 @@ set -euo pipefail
 # Always output valid JSON, even on unexpected errors
 trap 'printf "{}\n"; exit 0' ERR
 
-ENGRAM_PY="${CLAUDE_PLUGIN_ROOT}/engram.py"
+export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}"
 ENGRAM_DIR=".engram"
 [ -d "$ENGRAM_DIR" ] || { printf '{}\n'; exit 0; }
 
-python3 "$ENGRAM_PY" resync "$ENGRAM_DIR"
+python3 -m engram resync "$ENGRAM_DIR"
 
 # SessionEnd hooks only support universal fields (continue, stopReason, suppressOutput, systemMessage).
 # Context injection (additionalContext) is only valid for SessionStart hooks.

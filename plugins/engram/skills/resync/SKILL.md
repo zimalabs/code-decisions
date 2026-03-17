@@ -13,7 +13,7 @@ Run via a single Bash call:
 
 ```bash
 ENGRAM_DIR=".engram" && \
-python3 "${CLAUDE_PLUGIN_ROOT}/engram.py" resync "$ENGRAM_DIR" && \
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -m engram resync "$ENGRAM_DIR" && \
 if [ -f "$ENGRAM_DIR/index.db" ]; then
   decisions=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision';" 2>/dev/null || echo "0")
   echo "Resynced: $decisions decisions"

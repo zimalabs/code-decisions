@@ -4,7 +4,7 @@
 set -euo pipefail
 trap 'printf "{}\n"; exit 0' ERR
 
-ENGRAM_PY="${CLAUDE_PLUGIN_ROOT}/engram.py"
+export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}"
 
 # Read JSON from stdin
 input=$(cat)
@@ -28,7 +28,7 @@ content=$(printf '%s' "$input" | sed -n 's/.*"content" *: *"\(.*\)"/\1/p')
 decoded=$(printf '%s' "$content" | sed -e 's/\\n/\n/g' -e 's/\\"/"/g' -e 's/\\\\/\\/g')
 
 # Validate via Python
-errors=$(printf '%s' "$decoded" | python3 "$ENGRAM_PY" validate-content 2>&1 || true)
+errors=$(printf '%s' "$decoded" | python3 -m engram validate-content 2>&1 || true)
 
 if [ -n "$errors" ]; then
   # Escape for JSON

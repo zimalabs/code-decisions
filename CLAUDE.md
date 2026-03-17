@@ -20,7 +20,16 @@ make test     # test suite only
 plugins/engram/
   .claude-plugin/
     plugin.json           # Plugin manifest
-  engram.py               # Core library + CLI — all functions live here
+  engram/                 # Core library package
+    __init__.py           # ENGRAM_LIB_DIR, ENGRAM_SCHEMA_FILE, re-exports
+    __main__.py           # CLI dispatch (python3 -m engram)
+    _constants.py         # Regex patterns, NOISE_WORDS, StrPath alias
+    _helpers.py           # _connect, _check_fts5, _slugify, _slug, etc.
+    _frontmatter.py       # _FM_FIELDS, _split_frontmatter
+    _commits.py           # _is_decision_commit, engram_path_to_keywords
+    _validate.py          # _validate_content_stdin
+    signal.py             # Signal dataclass
+    store.py              # EngramStore class
   schema.sql              # SQLite schema (signals table + FTS5 + triggers)
   schemas/
     README.md             # Schema overview + shared field/link type reference

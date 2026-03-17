@@ -13,7 +13,7 @@ Run the brief pipeline via a single Bash call:
 
 ```bash
 ENGRAM_DIR=".engram" && \
-python3 "${CLAUDE_PLUGIN_ROOT}/engram.py" brief "$ENGRAM_DIR" && \
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -m engram brief "$ENGRAM_DIR" && \
 echo "Brief regenerated."
 ```
 

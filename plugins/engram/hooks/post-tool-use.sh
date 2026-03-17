@@ -4,7 +4,7 @@
 set -euo pipefail
 trap 'printf "{}\n"; exit 0' ERR
 
-ENGRAM_PY="${CLAUDE_PLUGIN_ROOT}/engram.py"
+export PYTHONPATH="${CLAUDE_PLUGIN_ROOT}"
 ENGRAM_DIR=".engram"
 
 # Read JSON from stdin
@@ -48,11 +48,11 @@ fi
 # Must have an index to query
 context_msg=""
 if [ -f "$ENGRAM_DIR/index.db" ] && [ "$skip_nudge" -ne 1 ]; then
-  keywords=$(python3 "$ENGRAM_PY" path-to-keywords "$file_path")
+  keywords=$(python3 -m engram path-to-keywords "$file_path")
   if [ -n "$keywords" ]; then
     # Dedup: skip if already injected for these keywords
     if [ ! -f "$session_context" ] || ! grep -qF "$keywords" "$session_context" 2>/dev/null; then
-      results=$(python3 "$ENGRAM_PY" query "$ENGRAM_DIR" "$keywords" 3)
+      results=$(python3 -m engram query "$ENGRAM_DIR" "$keywords" 3)
       if [ -n "$results" ]; then
         echo "$keywords" >> "$session_context"
         context_msg="Related past decisions:\\n$results"
