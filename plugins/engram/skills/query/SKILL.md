@@ -3,7 +3,7 @@ name: engram:query
 description: "Query past decisions from the engram index. Runs SQL against .engram/index.db via Bash. Use to look up context before starting work."
 ---
 
-# @engram:query
+# /engram:query
 
 Query the engram index for past decisions.
 

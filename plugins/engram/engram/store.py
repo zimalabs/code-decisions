@@ -504,7 +504,7 @@ class EngramStore:
         lines = brief.split("\n")
         if len(lines) > max_lines:
             brief = "\n".join(lines[:max_lines])
-            brief += f"\n\n*... truncated to {max_lines} lines. Use @engram:query for full details.*"
+            brief += f"\n\n*... truncated to {max_lines} lines. Use /engram:query for full details.*"
 
         (self.root / "brief.md").write_text(brief + "\n")
 

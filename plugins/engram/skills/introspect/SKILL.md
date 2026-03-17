@@ -3,7 +3,7 @@ name: engram:introspect
 description: "Interactive review loop — fills missing tags, links, and body sections on existing decisions by asking the user targeted questions."
 ---
 
-# @engram:introspect
+# /engram:introspect
 
 Walk through existing decisions and interactively fill gaps: missing tags, body sections, and links. Groups gaps by type so the user stays in one mental mode per pass.
 
@@ -122,7 +122,7 @@ To rebuild now: source plugins/engram/lib.sh && engram_reindex .engram
 
 ## Resumability
 
-No special tracking needed. Decisions that already have tags won't appear in the "missing tags" query. Decisions with body sections won't appear in the "missing sections" query. Running `@engram:introspect` again after partial enrichment picks up only the remaining gaps.
+No special tracking needed. Decisions that already have tags won't appear in the "missing tags" query. Decisions with body sections won't appear in the "missing sections" query. Running `/engram:introspect` again after partial enrichment picks up only the remaining gaps.
 
 ## Notes
 

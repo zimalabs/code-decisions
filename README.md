@@ -39,7 +39,7 @@ Memcached is faster for simple k/v but doesn't support pub/sub.
 Query it later:
 
 ```
-@engram:query what decisions about caching?
+/engram:query what decisions about caching?
 ```
 
 Decisions show up in PRs alongside the code they describe.
@@ -48,13 +48,13 @@ Decisions show up in PRs alongside the code they describe.
 
 | Skill | Purpose |
 |---|---|
-| `@engram:capture` | Guided decision creation with schema validation |
-| `@engram:query` | Query past decisions (natural language or SQL) |
-| `@engram:resync` | Full sync: ingest, reindex, regenerate brief |
-| `@engram:brief` | Regenerate the context brief on demand |
-| `@engram:backfill` | Autonomously enrich incomplete decisions |
-| `@engram:introspect` | Interactive gap-filling for existing decisions |
-| `@engram:policies` | List active policies and their levels |
+| `/engram:capture` | Guided decision creation with schema validation |
+| `/engram:query` | Query past decisions (natural language or SQL) |
+| `/engram:resync` | Full sync: ingest, reindex, regenerate brief |
+| `/engram:brief` | Regenerate the context brief on demand |
+| `/engram:backfill` | Autonomously enrich incomplete decisions |
+| `/engram:introspect` | Interactive gap-filling for existing decisions |
+| `/engram:policies` | List active policies and their levels |
 
 ## Development
 

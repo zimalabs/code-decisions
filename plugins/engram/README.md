@@ -51,14 +51,14 @@ Redis supports pub/sub which we'll need for the notification system.
 Higher memory usage than Memcached for pure cache workloads.
 ```
 
-No CLI needed. Just write a file — or use `@engram:capture` for guided decision creation with schema validation.
+No CLI needed. Just write a file — or use `/engram:capture` for guided decision creation with schema validation.
 
 If you write a decision manually with the same slug as a commit subject (e.g., `use-redis-for-caching`), auto-ingest skips that commit. Manual decisions are the primary record; auto-ingest is a safety net for decisions that weren't explicitly captured.
 
 When the agent needs past decisions:
 
 ```
-@engram:query what decisions about caching?
+/engram:query what decisions about caching?
 ```
 
 ### Session ends
@@ -141,8 +141,8 @@ Ask questions in natural language — Claude converts them to SQL automatically.
 ### Natural language
 
 ```
-@engram:query what decisions have we made about authentication?
-@engram:query what did we decide about caching last week?
+/engram:query what decisions have we made about authentication?
+/engram:query what did we decide about caching last week?
 ```
 
 ### Full-text search
@@ -150,7 +150,7 @@ Ask questions in natural language — Claude converts them to SQL automatically.
 Search across all decisions by keyword:
 
 ```
-@engram:query anything mentioning Redis?
+/engram:query anything mentioning Redis?
 ```
 
 Behind the scenes:
@@ -166,8 +166,8 @@ WHERE signals_fts MATCH 'Redis' ORDER BY rank
 Walk the supersession chain to see how a decision evolved:
 
 ```
-@engram:query what did use-jwt replace?
-@engram:query show me the full auth decision chain
+/engram:query what did use-jwt replace?
+/engram:query show me the full auth decision chain
 ```
 
 Example chain: `use-sessions` → `use-jwt` → `use-oauth2`
@@ -177,7 +177,7 @@ Example chain: `use-sessions` → `use-jwt` → `use-oauth2`
 Follow links between decisions:
 
 ```
-@engram:query what's related to the Redis decision?
+/engram:query what's related to the Redis decision?
 ```
 
 ### Direct SQL
@@ -185,21 +185,21 @@ Follow links between decisions:
 Power users can pass raw SQL queries:
 
 ```
-@engram:query SELECT COUNT(*) as count FROM signals
-@engram:query SELECT title, date FROM signals WHERE date >= '2026-03-01' ORDER BY date DESC
+/engram:query SELECT COUNT(*) as count FROM signals
+/engram:query SELECT title, date FROM signals WHERE date >= '2026-03-01' ORDER BY date DESC
 ```
 
 ## Skills
 
 | Skill | Purpose |
 |---|---|
-| `@engram:capture` | Guided decision creation — reads schema, validates frontmatter, writes the file |
-| `@engram:query` | Query past decisions in natural language or raw SQL (see [Querying](#querying)) |
-| `@engram:brief` | Regenerate and display the brief on demand — see updated context without restarting the session |
-| `@engram:resync` | Full sync: ingest commits + plans, rebuild index, regenerate brief |
-| `@engram:introspect` | Interactive gap-filling loop — adds missing tags, links, and body sections to existing decisions |
-| `@engram:backfill` | Autonomously enrich incomplete decisions — adds missing tags, rationale, alternatives, and links |
-| `@engram:policies` | List all active policies with their levels, events, and descriptions |
+| `/engram:capture` | Guided decision creation — reads schema, validates frontmatter, writes the file |
+| `/engram:query` | Query past decisions in natural language or raw SQL (see [Querying](#querying)) |
+| `/engram:brief` | Regenerate and display the brief on demand — see updated context without restarting the session |
+| `/engram:resync` | Full sync: ingest commits + plans, rebuild index, regenerate brief |
+| `/engram:introspect` | Interactive gap-filling loop — adds missing tags, links, and body sections to existing decisions |
+| `/engram:backfill` | Autonomously enrich incomplete decisions — adds missing tags, rationale, alternatives, and links |
+| `/engram:policies` | List all active policies with their levels, events, and descriptions |
 
 ## Policy Engine
 
@@ -229,12 +229,12 @@ Engram enforces behavior through a configurable policy engine. A single thin dis
 | `related-context` | CONTEXT | PostToolUse | Injects related past decisions when editing code (path + content keywords) |
 | `subagent-context` | CONTEXT | SubagentStop | Injects brief into subagent results |
 | `compact-context` | CONTEXT | PreCompact | Regenerates brief before context compaction |
-| `capture-nudge` | NUDGE | PostToolUse | Suggests `@engram:capture` after 3+ code edits (once/session) |
+| `capture-nudge` | NUDGE | PostToolUse | Suggests `/engram:capture` after 3+ code edits (once/session) |
 | `stop-nudge` | NUDGE | Stop | Nudges if no decisions written this session (skips read-only sessions) |
 | `decision-language` | NUDGE | UserPromptSubmit | Detects "let's go with…" and suggests capture (per-phrase dedup) |
-| `incomplete-nudge` | NUDGE | Notification | Suggests `@engram:backfill` for incomplete decisions |
+| `incomplete-nudge` | NUDGE | Notification | Suggests `/engram:backfill` for incomplete decisions |
 
-List active policies anytime with `@engram:policies`.
+List active policies anytime with `/engram:policies`.
 
 ### Configuring policies
 
@@ -330,7 +330,7 @@ For sensitive content that should be excluded from brief and context, write to `
 
 Private decisions are:
 - **Excluded from brief and context** — never auto-injected into agent context
-- **Indexed and queryable** — available on-demand via `@engram:query`
+- **Indexed and queryable** — available on-demand via `/engram:query`
 - **Same format** — identical to public decisions
 
 The directory path IS the privacy boundary. No config, no encryption. Move a file between `decisions/` and `_private/` to change its visibility.

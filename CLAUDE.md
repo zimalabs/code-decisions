@@ -65,14 +65,14 @@ No background jobs. Hooks call `EngramStore.resync()` at session start and end, 
 resync → ingest_commits → ingest_plans → reindex → brief
 ```
 
-`reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds. Use `@engram:resync` to trigger this manually.
+`reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds. Use `/engram:resync` to trigger this manually.
 
 ## Architecture Rules
 
 1. **Markdown is source of truth.** `index.db` is derived. Never store data only in SQLite.
 2. **Append-only signals.** Don't delete or overwrite signal files. Write new ones.
 3. **Directory = privacy.** `_private/` path means excluded from brief and context injection. No config flags.
-4. **No CLI.** Capture via Write tool, query via `@engram:query` skill, everything else via hooks.
+4. **No CLI.** Capture via Write tool, query via `/engram:query` skill, everything else via hooks.
 5. **Pure methods on EngramStore.** No side effects at import time. Store methods operate on `self.root`; module-level helpers are pure functions.
 
 ## Schema

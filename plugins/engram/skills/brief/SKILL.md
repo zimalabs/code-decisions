@@ -3,7 +3,7 @@ name: engram:brief
 description: "Regenerate and display the engram brief on demand. Run after capturing new signals or reindexing to see the updated summary without starting a new session."
 ---
 
-# @engram:brief
+# /engram:brief
 
 Regenerate and display the current engram brief.
 

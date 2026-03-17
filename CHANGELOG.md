@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Renamed "notes" to "signals" throughout
 - Hooks auto-init on first session (no manual `engram init`)
 - Capture via Write tool (write markdown files directly)
-- Query via `@engram:query` skill (SQL against index.db)
+- Query via `/engram:query` skill (SQL against index.db)
 - Hook timeout increased to 15s for brownfield ingestion
 
 ### Removed

@@ -1,10 +1,9 @@
 ---
-name: policies
-description: List all active engram policies with their levels, events, and descriptions
-user_invocable: true
+name: engram:policies
+description: "List all active engram policies with their levels, events, and descriptions"
 ---
 
-# @engram:policies — Active Policy Introspection
+# /engram:policies — Active Policy Introspection
 
 Run the policy engine in list mode to display all registered policies.
 

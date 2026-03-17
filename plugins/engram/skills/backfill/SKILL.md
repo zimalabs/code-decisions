@@ -3,7 +3,7 @@ name: engram:backfill
 description: "Autonomously enrich incomplete signals — adds missing tags, rationale, alternatives, and links without user interaction."
 ---
 
-# @engram:backfill
+# /engram:backfill
 
 Autonomously enrich incomplete decision signals. No user interaction — infer missing metadata from conversation context and signal content.
 

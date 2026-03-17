@@ -116,7 +116,7 @@ def _commit_gate_condition(data: dict[str, Any], state: SessionState) -> PolicyR
         decision="block",
         reason=(
             "No decision signal written this session. Write a signal to "
-            ".engram/decisions/{slug}.md before committing (use @engram:capture). "
+            ".engram/decisions/{slug}.md before committing (use /engram:capture). "
             "If this change is trivial (typo, formatting), amend with --amend to bypass."
         ),
     )
@@ -314,7 +314,7 @@ def _session_context_condition(data: dict[str, Any], state: SessionState) -> Pol
         "  Write .engram/_private/decisions/{slug}.md\n"
         "\n"
         "To query past signals:\n"
-        "  @engram:query <question>"
+        "  /engram:query <question>"
     )
 
     return PolicyResult(
@@ -383,7 +383,7 @@ def _subagent_context_condition(data: dict[str, Any], state: SessionState) -> Po
     if not state.has_fired("subagent-context"):
         state.mark_fired("subagent-context")
         msg_parts.append(
-            "If this subagent made architectural decisions, capture them with @engram:capture."
+            "If this subagent made architectural decisions, capture them with /engram:capture."
         )
 
     if not msg_parts:
@@ -448,7 +448,7 @@ def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> Polic
 
     return PolicyResult(
         matched=True,
-        system_message="Consider recording this decision with @engram:capture.",
+        system_message="Consider recording this decision with /engram:capture.",
     )
 
 
@@ -479,7 +479,7 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
                     state.mark_fired("backfill-nudge")
                     return PolicyResult(
                         matched=True, ok=True,
-                        reason=f"{invalid_count} incomplete signal(s) \u2014 consider @engram:backfill to enrich them.",
+                        reason=f"{invalid_count} incomplete signal(s) \u2014 consider /engram:backfill to enrich them.",
                     )
             except sqlite3.Error:
                 pass
@@ -494,7 +494,7 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
 
     return PolicyResult(
         matched=True, ok=True,
-        reason="No new decision signals this session. If you made significant changes, consider @engram:capture.",
+        reason="No new decision signals this session. If you made significant changes, consider /engram:capture.",
     )
 
 
@@ -515,7 +515,7 @@ def _decision_language_condition(data: dict[str, Any], state: SessionState) -> P
     if re.search(r"(why did we|what was decided|what did we decide|remind me)", prompt_lower):
         return PolicyResult(
             matched=True, ok=True,
-            reason="Past signals may exist \u2014 consider @engram:query.",
+            reason="Past signals may exist \u2014 consider /engram:query.",
         )
 
     # Check for decision language (per-phrase dedup)
@@ -531,7 +531,7 @@ def _decision_language_condition(data: dict[str, Any], state: SessionState) -> P
         state.mark_fired(dedup_key)
         return PolicyResult(
             matched=True, ok=True,
-            reason="That sounds like a decision \u2014 consider @engram:capture.",
+            reason="That sounds like a decision \u2014 consider /engram:capture.",
         )
 
     return None
@@ -557,7 +557,7 @@ def _incomplete_nudge_condition(data: dict[str, Any], state: SessionState) -> Po
 
     return PolicyResult(
         matched=True,
-        system_message=f"{invalid_count} incomplete decision(s) \u2014 consider @engram:backfill to enrich them.",
+        system_message=f"{invalid_count} incomplete decision(s) \u2014 consider /engram:backfill to enrich them.",
     )
 
 

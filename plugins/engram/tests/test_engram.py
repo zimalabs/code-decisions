@@ -2046,7 +2046,7 @@ def test_pre_commit_gate():
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
     assert_contains("blocks commit without decision", output, '"decision": "block"')
-    assert_contains("block mentions capture", output, "@engram:capture")
+    assert_contains("block mentions capture", output, "/engram:capture")
 
     # ── git commit --amend → allow (bypass) ──
     output = subprocess.run(
@@ -2207,7 +2207,7 @@ def test_subagent_stop_context():
     parsed = json.loads(output)
     assert_contains("subagent gets brief context", parsed.get("systemMessage", ""), "Decision Context")
     assert_contains("subagent gets decision title", parsed.get("systemMessage", ""), "Test decision for subagent")
-    assert_contains("subagent gets capture nudge", parsed.get("systemMessage", ""), "@engram:capture")
+    assert_contains("subagent gets capture nudge", parsed.get("systemMessage", ""), "/engram:capture")
 
 
 def test_post_push_resync():

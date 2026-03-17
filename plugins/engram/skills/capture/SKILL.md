@@ -3,7 +3,7 @@ name: engram:capture
 description: "Write a decision signal file to .engram/. Use when the agent makes a significant decision. No CLI — just write a markdown file."
 ---
 
-# @engram:capture
+# /engram:capture
 
 Write a decision signal file directly to the `.engram/` directory using the Write tool.
 
@@ -73,7 +73,7 @@ status = "withdrawn"
 +++
 ```
 
-Withdrawn signals are excluded from the brief and context injection but remain queryable via `@engram:query`. Use this instead of deleting signals — it preserves the decision history while keeping the brief clean.
+Withdrawn signals are excluded from the brief and context injection but remain queryable via `/engram:query`. Use this instead of deleting signals — it preserves the decision history while keeping the brief clean.
 
 ## Content Guidelines
 

@@ -3,7 +3,7 @@ name: engram:resync
 description: "Run the full engram sync pipeline: ingest commits and plans, rebuild the index, and regenerate the brief. Use after editing signals or when the index feels stale."
 ---
 
-# @engram:resync
+# /engram:resync
 
 Run the full sync pipeline — ingest, reindex, and regenerate the brief.
 
