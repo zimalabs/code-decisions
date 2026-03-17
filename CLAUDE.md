@@ -78,7 +78,7 @@ resync → ingest_commits → ingest_plans → reindex → brief
 ## Schema
 
 ```sql
-signals: id, type, title, content, tags, source, date, file, private, excerpt, slug, status
+signals: id, type, title, content, tags, source, date, file, private, excerpt, slug, status, created_at, updated_at
 signals_fts: FTS5 virtual table (title, content, tags) synced via triggers
 links: source_file, target_file, rel_type  (decision-to-decision relationships)
 meta: key, value  (stores ingestion cursors like last_commit)

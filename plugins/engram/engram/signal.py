@@ -22,6 +22,7 @@ class Signal:
     supersedes: str = ""
     links: str = ""
     status: str = "active"
+    created_at: str = ""
     _has_frontmatter: bool = dataclasses.field(default=True, repr=False)
 
     @classmethod
@@ -52,6 +53,7 @@ class Signal:
             supersedes=fm.get("supersedes", ""),
             links=fm.get("links", ""),
             status=fm.get("status", "active"),
+            created_at=fm.get("created_at", ""),
             _has_frontmatter=has_fm,
         )
 
@@ -102,6 +104,11 @@ class Signal:
 
         if not lead_paragraph or len(lead_paragraph) < 20:
             errors.append("lead paragraph after title must exist and be >= 20 chars (explains why)")
+
+        # Required body sections
+        for section in ("## Rationale", "## Alternatives"):
+            if section not in self.body:
+                errors.append(f"missing required section: {section}")
 
         return (len(errors) == 0, "; ".join(errors) + "; " if errors else "")
 

@@ -81,6 +81,7 @@ Withdrawn signals are excluded from the brief and context injection but remain q
 - Include the *why*, not just the *what*
 - Reference specific files, PRs, or conversations when relevant
 - Keep individual signals focused on one thing
+- **`## Rationale` and `## Alternatives` are required sections** — signals without them are marked invalid
 - **Tags are required** — at least one tag (not empty `[]`)
 - **Lead paragraph is mandatory** — the first non-empty line after `# Title` must explain "why" and be at least 20 characters. Signals without this are marked invalid and excluded from the brief.
 - Source field is optional (hooks auto-set `plan:<file>`, or `git:<hash>` when git tracking is enabled)

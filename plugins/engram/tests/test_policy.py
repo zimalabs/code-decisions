@@ -93,7 +93,9 @@ def _write_signal(engram_dir, slug="test-decision", private=False):
         "tags = [\"testing\"]\n"
         "+++\n\n"
         f"# {slug}\n\n"
-        "This is a test decision with sufficient rationale for validation.\n"
+        "This is a test decision with sufficient rationale for validation.\n\n"
+        "## Alternatives\n- No alternative considered\n\n"
+        "## Rationale\nChosen for testing purposes.\n"
     )
     return target
 
@@ -403,7 +405,9 @@ def test_content_validation_accepts_valid():
             "file_path": ".engram/decisions/good.md",
             "content": (
                 "+++\ndate = 2026-03-17\ntags = [\"testing\"]\n+++\n\n"
-                "# Good Decision\n\nThis is a valid decision with sufficient rationale.\n"
+                "# Good Decision\n\nThis is a valid decision with sufficient rationale.\n\n"
+                "## Alternatives\n- None considered\n\n"
+                "## Rationale\nChosen for testing.\n"
             ),
         }
     }

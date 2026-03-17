@@ -129,18 +129,30 @@ class EngramStore:
         if sig.status not in ("active", "withdrawn"):
             sig.status = "active"
 
-        # Validate — invalid overrides frontmatter status
+        # Validate — invalid overrides frontmatter status (but not withdrawn)
         ok, _ = sig.validate()
-        if not ok:
+        if not ok and sig.status != "withdrawn":
             sig.status = "invalid"
             print(f"engram: warning: {Path(filepath).name} is incomplete (missing rationale)", file=sys.stderr)
 
+        # Timestamps
+        p = Path(filepath)
+        created_at = sig.created_at
+        if not created_at:
+            try:
+                created_at = datetime.fromtimestamp(p.stat().st_birthtime, tz=timezone.utc).isoformat()
+            except AttributeError:
+                created_at = datetime.fromtimestamp(p.stat().st_ctime, tz=timezone.utc).isoformat()
+        elif not isinstance(created_at, str):
+            created_at = str(created_at)
+        updated_at = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).isoformat()
+
         with self.connect() as conn:
             conn.execute(
-                "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (sig.sig_type, sig.title, sig.content, sig.tags, sig.source, sig.date,
-                 str(filepath), private, sig.excerpt, slug, sig.status),
+                 str(filepath), private, sig.excerpt, slug, sig.status, created_at, updated_at),
             )
 
             # Insert supersedes link

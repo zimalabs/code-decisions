@@ -19,6 +19,7 @@ All decision signals support these fields:
 | `source` | no | `"git:<hash>"` or `"plan:<file>"` | Auto-set by hooks during ingestion |
 | `supersedes` | no | `"slug"` | File stem of the decision this replaces |
 | `links` | no | `["rel:stem"]` | TOML array of relationships |
+| `created_at` | no | ISO datetime | Set once at creation; fallback to file birthtime at index |
 
 ## Link Types
 

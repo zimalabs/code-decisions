@@ -530,7 +530,9 @@ def test_brief():
 
     Path(d, "decisions", "pick-redis.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"infrastructure\"]\n+++\n\n"
-        "# Pick Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
+        "# Pick Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n\n"
+        "## Alternatives\n- Memcached — no pub/sub\n\n"
+        "## Rationale\nRedis supports pub/sub for notifications.\n"
     )
 
     store.reindex()
@@ -708,11 +710,13 @@ def test_brief_excludes_private():
 
     Path(d, "decisions", "public-choice.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"architecture\"]\n+++\n\n"
-        "# Public architecture choice\n\nVisible to everyone in the team and included in the brief.\n"
+        "# Public architecture choice\n\nVisible to everyone in the team and included in the brief.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nBest option.\n"
     )
     Path(d, "_private", "decisions", "private-deal.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"business\"]\n+++\n\n"
-        "# Private deal terms\n\nConfidential information about deal structure and terms.\n"
+        "# Private deal terms\n\nConfidential information about deal structure and terms.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nBest option.\n"
     )
 
     store.reindex()
@@ -944,11 +948,13 @@ def test_brief_hides_superseded():
 
     Path(d, "decisions", "old-cache.md").write_text(
         "+++\ndate = 2026-03-10\ntags = [\"infrastructure\"]\n+++\n\n"
-        "# Use Memcached for caching\n\nFast and simple key-value store for basic caching needs.\n"
+        "# Use Memcached for caching\n\nFast and simple key-value store for basic caching needs.\n\n"
+        "## Alternatives\n- Redis\n\n## Rationale\nSimple k/v.\n"
     )
     Path(d, "decisions", "new-cache.md").write_text(
         "+++\ndate = 2026-03-15\ntags = [\"infrastructure\"]\nsupersedes = \"old-cache\"\n+++\n\n"
-        "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n"
+        "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n\n"
+        "## Alternatives\n- Memcached\n\n## Rationale\nPub/sub support.\n"
     )
 
     store.reindex()
@@ -968,15 +974,18 @@ def test_brief_tag_grouping():
 
     Path(d, "decisions", "redis.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"infrastructure\", \"caching\"]\n+++\n\n"
-        "# Use Redis\n\nAlready in our stack for session storage and we need pub/sub.\n"
+        "# Use Redis\n\nAlready in our stack for session storage and we need pub/sub.\n\n"
+        "## Alternatives\n- Memcached\n\n## Rationale\nPub/sub support.\n"
     )
     Path(d, "decisions", "jwt.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"auth\", \"security\"]\n+++\n\n"
-        "# Use JWT\n\nMobile clients need stateless token-based authentication.\n"
+        "# Use JWT\n\nMobile clients need stateless token-based authentication.\n\n"
+        "## Alternatives\n- Sessions\n\n## Rationale\nStateless auth for mobile.\n"
     )
     Path(d, "decisions", "postgres.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"database\", \"storage\"]\n+++\n\n"
-        "# Use PostgreSQL\n\nBetter JSON support and window functions than MySQL.\n"
+        "# Use PostgreSQL\n\nBetter JSON support and window functions than MySQL.\n\n"
+        "## Alternatives\n- MySQL\n\n## Rationale\nJSON and window functions.\n"
     )
 
     store.reindex()
@@ -995,7 +1004,8 @@ def test_brief_max_lines():
     for i in range(1, 21):
         Path(d, "decisions", f"bulk-{i}.md").write_text(
             f"+++\ndate = 2026-03-14\ntags = [\"bulk\", \"testing\"]\n+++\n\n"
-            f"# Bulk decision number {i}\n\nSome explanation for decision {i} with enough text to occupy space in the brief.\n"
+            f"# Bulk decision number {i}\n\nSome explanation for decision {i} with enough text to occupy space in the brief.\n\n"
+            f"## Alternatives\n- None\n\n## Rationale\nBulk test.\n"
         )
 
     store.reindex()
@@ -1016,7 +1026,8 @@ def test_brief_excerpts():
 
     Path(d, "decisions", "test-exc.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"infrastructure\"]\n+++\n\n"
-        "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
+        "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n\n"
+        "## Alternatives\n- Memcached\n\n## Rationale\nPub/sub support.\n"
     )
 
     store.reindex()
@@ -1127,15 +1138,18 @@ def test_query_relevant():
 
     Path(d, "decisions", "use-redis.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"infrastructure\"]\n+++\n\n"
-        "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
+        "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n\n"
+        "## Alternatives\n- Memcached\n\n## Rationale\nPub/sub.\n"
     )
     Path(d, "decisions", "jwt-auth.md").write_text(
         "+++\ndate = 2026-03-15\ntags = [\"auth\"]\n+++\n\n"
-        "# Use JWT for authentication\n\nToken-based auth for mobile clients that need stateless sessions.\n"
+        "# Use JWT for authentication\n\nToken-based auth for mobile clients that need stateless sessions.\n\n"
+        "## Alternatives\n- Sessions\n\n## Rationale\nStateless.\n"
     )
     Path(d, "_private", "decisions", "secret.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"caching\"]\n+++\n\n"
-        "# Secret caching strategy\n\nPrivate info about caching that should not be visible in queries.\n"
+        "# Secret caching strategy\n\nPrivate info about caching that should not be visible in queries.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nPrivate.\n"
     )
 
     store.reindex()
@@ -1166,11 +1180,13 @@ def test_query_relevant_excludes_superseded():
 
     Path(d, "decisions", "old-cache.md").write_text(
         "+++\ndate = 2026-03-10\ntags = [\"infrastructure\"]\n+++\n\n"
-        "# Use Memcached for caching\n\nFast and simple key-value store for basic caching needs.\n"
+        "# Use Memcached for caching\n\nFast and simple key-value store for basic caching needs.\n\n"
+        "## Alternatives\n- Redis\n\n## Rationale\nSimple.\n"
     )
     Path(d, "decisions", "new-cache.md").write_text(
         "+++\ndate = 2026-03-15\ntags = [\"infrastructure\"]\nsupersedes = \"old-cache\"\n+++\n\n"
-        "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n"
+        "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n\n"
+        "## Alternatives\n- Memcached\n\n## Rationale\nPub/sub.\n"
     )
 
     store.reindex()
@@ -1189,15 +1205,18 @@ def test_tag_summary():
     for i in range(1, 4):
         Path(d, "decisions", f"arch-{i}.md").write_text(
             f"+++\ndate = 2026-03-14\ntags = [\"architecture\"]\n+++\n\n"
-            f"# Architecture decision {i}\n\nContent {i}.\n"
+            f"# Architecture decision {i}\n\nContent {i} with enough explanation.\n\n"
+            f"## Alternatives\n- None\n\n## Rationale\nBest option.\n"
         )
     for i in range(1, 3):
         Path(d, "decisions", f"testing-{i}.md").write_text(
             f"+++\ndate = 2026-03-14\ntags = [\"testing\"]\n+++\n\n"
-            f"# Testing decision {i}\n\nContent {i}.\n"
+            f"# Testing decision {i}\n\nContent {i} with enough explanation.\n\n"
+            f"## Alternatives\n- None\n\n## Rationale\nBest option.\n"
         )
     Path(d, "decisions", "ci.md").write_text(
-        "+++\ndate = 2026-03-14\ntags = [\"ci\"]\n+++\n\n# CI decision\n\nContent.\n"
+        "+++\ndate = 2026-03-14\ntags = [\"ci\"]\n+++\n\n# CI decision\n\nContent with enough explanation here.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nBest option.\n"
     )
 
     store.reindex()
@@ -1294,7 +1313,8 @@ def test_pre_compact_output():
 
     Path(d, "decisions", "compact-test.md").write_text(
         "+++\ndate = 2026-03-14\ntags = [\"testing\"]\n+++\n\n"
-        "# Compact test decision\n\nTesting pre-compact hook with valid signal to verify context injection.\n"
+        "# Compact test decision\n\nTesting pre-compact hook with valid signal to verify context injection.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nTest coverage.\n"
     )
 
     store.reindex()
@@ -1408,7 +1428,7 @@ def test_pre_tool_use_validation():
     assert_eq("non-engram file passes", output, "{}")
 
     # Valid signal
-    valid_content = "+++\ndate = 2026-03-17\ntags = [\"architecture\"]\n+++\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars."
+    valid_content = "+++\ndate = 2026-03-17\ntags = [\"architecture\"]\n+++\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars.\n\n## Alternatives\n- None\n\n## Rationale\nValid."
     input_json = json.dumps({"tool_name": "Write", "tool_input": {"file_path": ".engram/decisions/valid.md", "content": valid_content}})
     output = subprocess.run(
         ["bash", dispatch, "PreToolUse"],
@@ -1470,7 +1490,8 @@ def test_notification_hook():
     Path(d, "decisions", "incomplete.md").unlink()
     Path(d, "decisions", "complete.md").write_text(
         "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
-        "# Complete decision\n\nThis decision has proper rationale and tags for validation.\n"
+        "# Complete decision\n\nThis decision has proper rationale and tags for validation.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nComplete.\n"
     )
 
     store.reindex()
@@ -1570,7 +1591,8 @@ def test_validate_signal_valid():
         "+++\ndate = 2026-03-16\ntags = [\"architecture\", \"validation\"]\n+++\n\n"
         "# Use strict validation for signals\n\n"
         "Enforce structure at write time to ensure all decisions include rationale, improving brief quality.\n\n"
-        "## Alternatives\n- No validation — too many incomplete signals\n"
+        "## Alternatives\n- No validation — too many incomplete signals\n\n"
+        "## Rationale\nEnsures all decisions include the why.\n"
     )
 
     ok, _ = engram.Signal.from_file(f"{d}/decisions/valid-test.md").validate()
@@ -1628,7 +1650,9 @@ def test_reindex_marks_invalid():
     Path(d, "decisions", "good.md").write_text(
         "+++\ndate = 2026-03-16\ntags = [\"validation\"]\n+++\n\n"
         "# A good decision with rationale\n\n"
-        "This decision includes a proper lead paragraph explaining why it was made.\n"
+        "This decision includes a proper lead paragraph explaining why it was made.\n\n"
+        "## Alternatives\n- None considered\n\n"
+        "## Rationale\nBest option available.\n"
     )
     Path(d, "decisions", "bad.md").write_text(
         "+++\ndate = 2026-03-16\n+++\n\n# Bad decision\n\n"
@@ -1652,7 +1676,8 @@ def test_brief_excludes_invalid():
     Path(d, "decisions", "visible.md").write_text(
         "+++\ndate = 2026-03-16\ntags = [\"validation\"]\n+++\n\n"
         "# Visible decision in brief\n\n"
-        "This decision has proper rationale and should appear in the brief output.\n"
+        "This decision has proper rationale and should appear in the brief output.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nBest option.\n"
     )
     Path(d, "decisions", "hidden.md").write_text(
         "+++\ndate = 2026-03-16\n+++\n\n# Hidden from brief\n\nShort.\n"
@@ -1712,7 +1737,8 @@ def test_resync():
 
     Path(d, "decisions", "resync-test.md").write_text(
         "+++\ndate = 2026-03-17\ntags = [\"testing\"]\n+++\n\n"
-        "# Test resync pipeline\n\nVerify that engram_resync runs ingest, reindex, and brief in one call.\n"
+        "# Test resync pipeline\n\nVerify that engram_resync runs ingest, reindex, and brief in one call.\n\n"
+        "## Alternatives\n- Manual steps\n\n## Rationale\nSingle-call convenience.\n"
     )
 
     store.resync()
@@ -1839,6 +1865,7 @@ def test_find_incomplete_empty():
     Path(d, "decisions", "done.md").write_text(
         "+++\ndate = 2026-03-17\ntags = [\"test\"]\nlinks = [\"related:other\"]\n+++\n\n"
         "# Done decision\n\nThis decision has everything it needs and should not appear.\n\n"
+        "## Alternatives\n- None considered\n\n"
         "## Rationale\n\nGood reasons.\n"
     )
 
@@ -1961,7 +1988,8 @@ def test_status_withdrawn_indexed():
 
     Path(d, "decisions", "active-feature.md").write_text(
         "+++\ndate = 2026-03-11\ntags = [\"feature\"]\n+++\n\n"
-        "# Keep this feature active\n\nThis decision is current and should default to active status.\n"
+        "# Keep this feature active\n\nThis decision is current and should default to active status.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nActive feature.\n"
     )
 
     store.reindex()
@@ -1978,7 +2006,8 @@ def test_brief_hides_withdrawn():
 
     Path(d, "decisions", "active-choice.md").write_text(
         "+++\ndate = 2026-03-15\ntags = [\"architecture\"]\n+++\n\n"
-        "# Use PostgreSQL for storage\n\nRelational model fits our query patterns well and we need ACID.\n"
+        "# Use PostgreSQL for storage\n\nRelational model fits our query patterns well and we need ACID.\n\n"
+        "## Alternatives\n- MongoDB\n\n## Rationale\nACID compliance.\n"
     )
     Path(d, "decisions", "withdrawn-choice.md").write_text(
         "+++\ndate = 2026-03-10\ntags = [\"feature\"]\nstatus = \"withdrawn\"\n+++\n\n"
@@ -2002,11 +2031,13 @@ def test_query_relevant_excludes_withdrawn():
 
     Path(d, "decisions", "active-storage.md").write_text(
         "+++\ndate = 2026-03-15\ntags = [\"storage\"]\n+++\n\n"
-        "# Use S3 for file storage\n\nScalable object storage for user uploads and attachments.\n"
+        "# Use S3 for file storage\n\nScalable object storage for user uploads and attachments.\n\n"
+        "## Alternatives\n- Local disk\n\n## Rationale\nScalability.\n"
     )
     Path(d, "decisions", "withdrawn-storage.md").write_text(
         "+++\ndate = 2026-03-10\ntags = [\"storage\"]\nstatus = \"withdrawn\"\n+++\n\n"
-        "# Use local disk for file storage\n\nWas planned but never implemented, switching to cloud storage.\n"
+        "# Use local disk for file storage\n\nWas planned but never implemented, switching to cloud storage.\n\n"
+        "## Alternatives\n- S3\n\n## Rationale\nSimplicity.\n"
     )
 
     store.reindex()
@@ -2070,7 +2101,8 @@ def test_pre_commit_gate():
     time.sleep(0.1)  # ensure mtime is newer than index.db
     Path(d, "decisions", "new-feature.md").write_text(
         "+++\ndate = 2026-03-17\ntags = [\"feature\"]\n+++\n\n"
-        "# Add new feature\n\nThis feature improves the user experience significantly.\n"
+        "# Add new feature\n\nThis feature improves the user experience significantly.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nUX improvement.\n"
     )
     output = subprocess.run(
         ["bash", dispatch, "PreToolUse"],
@@ -2195,7 +2227,8 @@ def test_subagent_stop_context():
     store.init()
     Path(d, "decisions", "test-decision.md").write_text(
         "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
-        "# Test decision for subagent\n\nSubagents should see this decision in their context.\n"
+        "# Test decision for subagent\n\nSubagents should see this decision in their context.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nTest context.\n"
     )
     store.reindex()
     store.brief()
@@ -2250,7 +2283,8 @@ def test_post_push_resync():
     # git push → resync message
     Path(d, "decisions", "push-test.md").write_text(
         "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
-        "# Push test\n\nThis should be resynced after push.\n"
+        "# Push test\n\nThis should be resynced after push.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nTest.\n"
     )
     output = subprocess.run(
         ["bash", dispatch, "PostToolUse"],
@@ -2260,6 +2294,75 @@ def test_post_push_resync():
     ).stdout.strip()
     parsed = json.loads(output)
     assert_contains("push triggers resync message", parsed.get("systemMessage", ""), "resynced")
+
+
+# ── Timestamp tests ──────────────────────────────────────────────────
+
+def test_timestamps_indexed():
+    print("test_timestamps_indexed:")
+    d = str(TEST_DIR / "test-timestamps" / ".engram")
+    store = engram.EngramStore(d)
+    store.init()
+
+    Path(d, "decisions", "ts-test.md").write_text(
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
+        "# Timestamp test\n\nThis signal should have timestamps populated at index time.\n\n"
+        "## Alternatives\n- None\n\n## Rationale\nTest.\n"
+    )
+
+    store.reindex()
+
+    created = _db_scalar(f"{d}/index.db", "SELECT created_at FROM signals WHERE slug='ts-test'")
+    updated = _db_scalar(f"{d}/index.db", "SELECT updated_at FROM signals WHERE slug='ts-test'")
+    assert_not_contains("created_at populated", "EMPTY", str(created))
+    assert_not_contains("updated_at populated", "EMPTY", str(updated))
+    assert_contains("created_at is ISO format", str(created), "T")
+    assert_contains("updated_at is ISO format", str(updated), "T")
+
+
+def test_created_at_from_frontmatter():
+    print("test_created_at_from_frontmatter:")
+    d = str(TEST_DIR / "test-created-fm" / ".engram")
+    store = engram.EngramStore(d)
+    store.init()
+
+    Path(d, "decisions", "fm-ts.md").write_text(
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\ncreated_at = \"2026-01-15T10:30:00+00:00\"\n+++\n\n"
+        "# Frontmatter timestamp\n\nThe created_at from frontmatter should take precedence.\n\n"
+        "## Alternatives\n- Use mtime\n\n## Rationale\nExplicit creation date.\n"
+    )
+
+    store.reindex()
+
+    created = _db_scalar(f"{d}/index.db", "SELECT created_at FROM signals WHERE slug='fm-ts'")
+    assert_contains("created_at from frontmatter", str(created), "2026-01-15")
+
+
+# ── Section validation tests ────────────────────────────────────────
+
+def test_validate_missing_sections():
+    print("test_validate_missing_sections:")
+    sig = engram.Signal.from_text(
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
+        "# Missing both sections\n\nThis signal has no Rationale or Alternatives sections.\n"
+    )
+    ok, errors = sig.validate()
+    assert_eq("fails validation", ok, False)
+    assert_contains("mentions Rationale", errors, "## Rationale")
+    assert_contains("mentions Alternatives", errors, "## Alternatives")
+
+
+def test_validate_partial_sections():
+    print("test_validate_partial_sections:")
+    sig = engram.Signal.from_text(
+        "+++\ndate = 2026-03-17\ntags = [\"test\"]\n+++\n\n"
+        "# Has Alternatives only\n\nThis signal has Alternatives but no Rationale.\n\n"
+        "## Alternatives\n- Option A\n"
+    )
+    ok, errors = sig.validate()
+    assert_eq("fails validation", ok, False)
+    assert_contains("mentions Rationale", errors, "## Rationale")
+    assert_not_contains("does not mention Alternatives", errors, "## Alternatives")
 
 
 # ── Run all tests ───────────────────────────────────────────────────
@@ -2344,6 +2447,10 @@ if __name__ == "__main__":
         test_pre_tool_use_edit_guard,
         test_subagent_stop_context,
         test_post_push_resync,
+        test_timestamps_indexed,
+        test_created_at_from_frontmatter,
+        test_validate_missing_sections,
+        test_validate_partial_sections,
     ]
 
     for test in tests:

@@ -12,6 +12,7 @@ File: `.engram/decisions/{slug}.md`
 | `supersedes` | no | File stem of the signal this replaces |
 | `links` | no | TOML array: `["related:stem"]` |
 | `status` | no | Lifecycle status: `active` (default) or `withdrawn` |
+| `created_at` | no | ISO datetime — set once at creation, preserved across edits |
 
 ## Template
 
@@ -42,9 +43,9 @@ What we gave up or risk by choosing this.
 ## Body Sections
 
 - **Lead paragraph** (required): One-line summary of what was decided and why. Must be at least 20 characters.
-- **Alternatives** (recommended): What else was considered and why it was rejected.
-- **Rationale** (recommended): The reasoning and constraints that led to this choice.
-- **Trade-offs** (optional): What was given up or risked.
+- **Alternatives** (required): What else was considered and why it was rejected.
+- **Rationale** (required): The reasoning and constraints that led to this choice.
+- **Trade-offs** (recommended): What was given up or risked.
 
 ## Validation Rules
 
@@ -55,3 +56,5 @@ Signals are validated at index time. Invalid signals are indexed with `status='i
 3. **tags** — required, at least one tag (not empty `[]`)
 4. **H1 title** — required (`# ...` after frontmatter)
 5. **Lead paragraph** — required, first non-empty non-heading line after the title, minimum 20 characters
+6. **`## Rationale`** — required section
+7. **`## Alternatives`** — required section
