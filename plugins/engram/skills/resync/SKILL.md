@@ -12,9 +12,8 @@ Run the full sync pipeline — ingest, reindex, and regenerate the brief.
 Run via a single Bash call:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/lib.sh" && \
 ENGRAM_DIR=".engram" && \
-engram_resync "$ENGRAM_DIR" && \
+python3 "${CLAUDE_PLUGIN_ROOT}/engram.py" resync "$ENGRAM_DIR" && \
 if [ -f "$ENGRAM_DIR/index.db" ]; then
   decisions=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision';" 2>/dev/null || echo "0")
   echo "Resynced: $decisions decisions"

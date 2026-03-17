@@ -5,15 +5,15 @@ set -euo pipefail
 # Always output valid JSON, even on unexpected errors
 trap 'printf "{}\n"; exit 0' ERR
 
-source "${CLAUDE_PLUGIN_ROOT}/lib.sh"
+ENGRAM_PY="${CLAUDE_PLUGIN_ROOT}/engram.py"
 ENGRAM_DIR=".engram"
 
 # Must have .engram/ directory
 [ -d "$ENGRAM_DIR" ] || { printf '{}\n'; exit 0; }
 
 # Reindex to capture any mid-session signal writes, then regenerate brief
-engram_reindex "$ENGRAM_DIR"
-engram_brief "$ENGRAM_DIR"
+python3 "$ENGRAM_PY" reindex "$ENGRAM_DIR"
+python3 "$ENGRAM_PY" brief "$ENGRAM_DIR"
 
 # Read brief and inject as systemMessage
 [ -f "$ENGRAM_DIR/brief.md" ] || { printf '{}\n'; exit 0; }

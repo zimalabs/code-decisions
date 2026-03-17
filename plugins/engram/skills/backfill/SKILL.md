@@ -14,7 +14,7 @@ Autonomously enrich incomplete decision signals. No user interaction — infer m
 Run to discover gaps:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/lib.sh" && engram_find_incomplete .engram 5
+python3 "${CLAUDE_PLUGIN_ROOT}/engram.py" find-incomplete .engram 5
 ```
 
 Output is pipe-delimited: `file_stem|title|gap_types` where gap_types is a comma-separated list of: `tags`, `sections`, `links`.
@@ -86,7 +86,7 @@ Only add links when the relationship is obvious from content. When in doubt, ski
 After all edits, rebuild the index:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/lib.sh" && engram_resync .engram
+python3 "${CLAUDE_PLUGIN_ROOT}/engram.py" resync .engram
 ```
 
 ### Phase 5: Report

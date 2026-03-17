@@ -5,14 +5,14 @@ set -euo pipefail
 # Always output valid JSON, even on unexpected errors
 trap 'printf "{}\n"; exit 0' ERR
 
-source "${CLAUDE_PLUGIN_ROOT}/lib.sh"
+ENGRAM_PY="${CLAUDE_PLUGIN_ROOT}/engram.py"
 ENGRAM_DIR=".engram"
 
 # Always init — idempotent, ensures new dirs exist on old installs
-engram_init "$ENGRAM_DIR"
+python3 "$ENGRAM_PY" init "$ENGRAM_DIR"
 
 # ALWAYS re-sync — catches commits from any source (VS Code, terminal, CI, other devs)
-engram_resync "$ENGRAM_DIR"
+python3 "$ENGRAM_PY" resync "$ENGRAM_DIR"
 
 # Gather stats for intro banner
 if [ -f "$ENGRAM_DIR/index.db" ]; then
@@ -27,7 +27,7 @@ fi
   echo ""
   echo "  ◆ engram active"
   echo "  ├─ $decisions decisions"
-  uncommitted_msg=$(engram_uncommitted_summary "$ENGRAM_DIR")
+  uncommitted_msg=$(python3 "$ENGRAM_PY" uncommitted-summary "$ENGRAM_DIR")
   if [ -n "$uncommitted_msg" ]; then
     echo "  ├─ $uncommitted_msg"
   fi
@@ -46,7 +46,7 @@ instructions="$brief"
 
 # For large signal stores, append tag summary to help the agent know which domains have coverage
 if [ "$decisions" -gt 30 ]; then
-  tag_line=$(engram_tag_summary "$ENGRAM_DIR")
+  tag_line=$(python3 "$ENGRAM_PY" tag-summary "$ENGRAM_DIR")
   if [ -n "$tag_line" ]; then
     instructions="$instructions
 $tag_line"

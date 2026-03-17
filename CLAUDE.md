@@ -20,7 +20,7 @@ make test     # test suite only
 plugins/engram/
   .claude-plugin/
     plugin.json           # Plugin manifest
-  lib.sh                  # Core library — all functions live here
+  engram.py               # Core library + CLI — all functions live here
   schema.sql              # SQLite schema (signals table + FTS5 + triggers)
   schemas/
     README.md             # Schema overview + shared field/link type reference
@@ -34,8 +34,8 @@ plugins/engram/
     query/SKILL.md        # SQL queries against index.db
     resync/SKILL.md       # Full sync: ingest + reindex + brief
   tests/
-    test_engram.sh        # Test suite
-    run_tests.sh          # Test runner wrapper
+    test_engram.py        # Test suite (Python)
+    run_tests.sh          # Test runner wrapper (legacy)
 ```
 
 ## Key Concepts
@@ -61,7 +61,7 @@ engram_resync → engram_ingest_commits → engram_ingest_plans → engram_reind
 2. **Append-only signals.** Don't delete or overwrite signal files. Write new ones.
 3. **Directory = privacy.** `_private/` path means excluded from brief and context injection. No config flags.
 4. **No CLI.** Capture via Write tool, query via `@engram:query` skill, everything else via hooks.
-5. **Pure functions in lib.sh.** No side effects at source time. Every function takes `dir` as first arg.
+5. **Pure functions in engram.py.** No side effects at import time. Every function takes `dir` as first arg.
 
 ## Schema
 
@@ -79,14 +79,14 @@ Link rel_types: `supersedes`, `related`
 
 ## Adding a New Function
 
-1. Add the function to `plugins/engram/lib.sh`
-2. Add tests to `plugins/engram/tests/test_engram.sh`
+1. Add the function to `plugins/engram/engram.py`
+2. Add tests to `plugins/engram/tests/test_engram.py`
 3. Wire into hooks if it should run at session start/end
 4. Run `make check`
 
 ## Testing
 
-Tests use temp directories and real SQLite — no mocks. Each test function creates its own `.engram/` in `$TEST_DIR`. Git-related tests create throwaway repos via `_create_test_repo()`.
+Tests use temp directories and real SQLite — no mocks, no pytest. Each test function creates its own `.engram/` in a temp dir. Git-related tests create throwaway repos via `_create_test_repo()`.
 
 Test helpers: `assert_eq`, `assert_contains`, `assert_not_contains`, `assert_file_exists`, `assert_dir_exists`, `assert_file_count`.
 
@@ -117,7 +117,8 @@ What counts as significant: architecture changes, new features, refactors, depen
 ## Conventions
 
 - Table/FTS names: `signals`, `signals_fts` (not `notes`)
-- SQL escaping: use `sed "s/'/''/g"`, not bash string replacement
-- Frontmatter parsing: manual line-by-line (no YAML parser dependency)
+- SQL: parameterized queries (`?` placeholders), never string interpolation
+- Frontmatter parsing: manual line-by-line via `_parse_frontmatter()` (no YAML parser dependency)
 - Hook timeout: 15 seconds (set in `hooks.json`)
 - Filenames: `{slug}.md`, slug via `_slugify()`
+- Stdlib only: no PyYAML, no pytest, no external dependencies

@@ -122,7 +122,7 @@ For signal file schema (frontmatter fields, body sections, link types), see `${C
 Rebuild it first:
 
 ```bash
-source ${CLAUDE_PLUGIN_ROOT}/lib.sh && engram_reindex .engram
+python3 ${CLAUDE_PLUGIN_ROOT}/engram.py reindex .engram
 ```
 
 ## Output

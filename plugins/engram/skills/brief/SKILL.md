@@ -12,9 +12,8 @@ Regenerate and display the current engram brief.
 Run the brief pipeline via a single Bash call:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/lib.sh" && \
 ENGRAM_DIR=".engram" && \
-engram_brief "$ENGRAM_DIR" && \
+python3 "${CLAUDE_PLUGIN_ROOT}/engram.py" brief "$ENGRAM_DIR" && \
 echo "Brief regenerated."
 ```
 
