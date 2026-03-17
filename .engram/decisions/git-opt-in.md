@@ -2,6 +2,7 @@
 type: decision
 date: 2026-03-17
 tags: [architecture, config, git]
+links: [related:resolve-commit-signal-redundancy]
 ---
 
 # Make git integration opt-in via .engram/config

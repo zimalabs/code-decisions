@@ -2,6 +2,7 @@
 type: decision
 date: 2026-03-16
 tags: [schema, validation, quality]
+links: [related:store-tags-as-valid-json, related:resolve-commit-signal-redundancy]
 ---
 
 # Enforce decision structure with mandatory "why"
