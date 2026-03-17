@@ -11,6 +11,7 @@ File: `.engram/decisions/{slug}.md`
 | `source` | no | Origin: `plan:<file>` (auto-set), `git:<hash>` (when git tracking enabled) |
 | `supersedes` | no | File stem of the signal this replaces |
 | `links` | no | Bracket list: `[related:stem, blocks:stem]` |
+| `status` | no | Lifecycle status: `active` (default) or `withdrawn` |
 
 ## Template
 
@@ -20,6 +21,7 @@ date: YYYY-MM-DD
 tags: [topic1, topic2]
 supersedes: old-slug    # optional: replaces a prior decision
 links: [related:some-x]          # optional: related, blocks, blocked-by
+status: active          # optional: active (default) or withdrawn
 ---
 
 # Title of the decision

@@ -2501,6 +2501,134 @@ EOF
   assert_contains "notification nudges backfill" "$output" "backfill"
 }
 
+test_status_withdrawn_indexed() {
+  echo "test_status_withdrawn_indexed:"
+  local dir="$TEST_DIR/test-status-indexed/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/decisions/old-feature.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+tags: [feature]
+status: withdrawn
+---
+
+# Add visualize skill
+
+Feature was planned but never implemented, withdrawing this decision.
+EOF
+
+  engram_reindex "$dir"
+
+  local status_val
+  status_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE file_stem='old-feature';")
+  assert_eq "status column stores withdrawn" "$status_val" "withdrawn"
+
+  # Default status should be active
+  cat > "$dir/decisions/active-feature.md" << 'EOF'
+---
+type: decision
+date: 2026-03-11
+tags: [feature]
+---
+
+# Keep this feature active
+
+This decision is current and should default to active status.
+EOF
+
+  engram_reindex "$dir"
+
+  local active_val
+  active_val=$(sqlite3 "$dir/index.db" "SELECT status FROM signals WHERE file_stem='active-feature';")
+  assert_eq "status defaults to active" "$active_val" "active"
+}
+
+test_brief_hides_withdrawn() {
+  echo "test_brief_hides_withdrawn:"
+  local dir="$TEST_DIR/test-brief-withdrawn/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/decisions/active-choice.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+tags: [architecture]
+---
+
+# Use PostgreSQL for storage
+
+Relational model fits our query patterns well and we need ACID.
+EOF
+
+  cat > "$dir/decisions/withdrawn-choice.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+tags: [feature]
+status: withdrawn
+---
+
+# Add dashboard visualization
+
+Feature was planned but never built, no longer relevant to direction.
+EOF
+
+  engram_reindex "$dir"
+  engram_brief "$dir"
+
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_contains "brief shows active decision" "$brief" "Use PostgreSQL"
+  assert_not_contains "brief hides withdrawn decision" "$brief" "dashboard visualization"
+  assert_contains "brief shows withdrawn count" "$brief" "1 withdrawn"
+}
+
+test_query_relevant_excludes_withdrawn() {
+  echo "test_query_relevant_excludes_withdrawn:"
+  local dir="$TEST_DIR/test-query-withdrawn/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/decisions/active-storage.md" << 'EOF'
+---
+type: decision
+date: 2026-03-15
+tags: [storage]
+---
+
+# Use S3 for file storage
+
+Scalable object storage for user uploads and attachments.
+EOF
+
+  cat > "$dir/decisions/withdrawn-storage.md" << 'EOF'
+---
+type: decision
+date: 2026-03-10
+tags: [storage]
+status: withdrawn
+---
+
+# Use local disk for file storage
+
+Was planned but never implemented, switching to cloud storage.
+EOF
+
+  engram_reindex "$dir"
+
+  local result
+  result=$(engram_query_relevant "$dir" "storage")
+  assert_contains "shows active decision" "$result" "Use S3"
+  assert_not_contains "hides withdrawn" "$result" "local disk"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -2641,6 +2769,12 @@ echo ""
 test_stop_hook_backfill_nudge
 echo ""
 test_notification_backfill_nudge
+echo ""
+test_status_withdrawn_indexed
+echo ""
+test_brief_hides_withdrawn
+echo ""
+test_query_relevant_excludes_withdrawn
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

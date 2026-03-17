@@ -61,6 +61,18 @@ links: [related:redis-cluster]
 - **supersedes** — this decision replaces the target (target hidden from brief)
 - **related** — informational connection
 
+## Retiring Signals
+
+To mark a decision as no longer relevant without deleting it, add `status: withdrawn` to its frontmatter:
+
+```markdown
+---
+status: withdrawn
+---
+```
+
+Withdrawn signals are excluded from the brief and context injection but remain queryable via `@engram:query`. Use this instead of deleting signals — it preserves the decision history while keeping the brief clean.
+
 ## Content Guidelines
 
 - Be specific — "Use Redis for caching because it's already in our stack" not "Redis is good"

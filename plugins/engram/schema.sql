@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS signals (
     supersedes TEXT NOT NULL DEFAULT '',
     file_stem TEXT NOT NULL DEFAULT '',
     valid INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','withdrawn')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

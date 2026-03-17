@@ -489,7 +489,7 @@ _index_file() {
 
   # Parse frontmatter
   local in_frontmatter=0
-  local fm_type="" fm_date="" fm_tags="[]" fm_source="" fm_supersedes="" fm_links=""
+  local fm_type="" fm_date="" fm_tags="[]" fm_source="" fm_supersedes="" fm_links="" fm_status="active"
   local body=""
   local title=""
   local past_frontmatter=0
@@ -514,6 +514,7 @@ _index_file() {
                         fm_tags=$(_normalize_tags "$fm_tags");;
           supersedes:*) fm_supersedes="${line#supersedes:}"; fm_supersedes="${fm_supersedes# }";;
           links:*)      fm_links="${line#links:}"; fm_links="${fm_links# }";;
+          status:*)     fm_status="${line#status:}"; fm_status="${fm_status# }";;
         esac
         continue
       fi
@@ -562,7 +563,13 @@ _index_file() {
   esc_supersedes=$(printf '%s' "$fm_supersedes" | sed "s/'/''/g")
   esc_file_stem=$(printf '%s' "$file_stem" | sed "s/'/''/g")
 
-  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, valid) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_supersedes', '$esc_file_stem', $valid);"
+  # Normalize status (default to 'active' if unrecognized)
+  case "$fm_status" in
+    active|withdrawn) ;;
+    *) fm_status="active" ;;
+  esac
+
+  sqlite3 "$dir/index.db" "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, valid, status) VALUES ('$type', '$esc_title', '$esc_content', '$esc_tags', '$esc_source', '$fm_date', '$esc_file', $private, '$esc_excerpt', '$esc_supersedes', '$esc_file_stem', $valid, '$fm_status');"
 
   # Insert links
   if [ -n "$fm_supersedes" ]; then
@@ -613,21 +620,24 @@ engram_brief() {
   fi
 
   local decision_count
-  decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=1;" 2>/dev/null || echo "0")
+  decision_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=1 AND status='active';" 2>/dev/null || echo "0")
 
   local invalid_count
   invalid_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND valid=0;" 2>/dev/null || echo "0")
+
+  local withdrawn_count
+  withdrawn_count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn';" 2>/dev/null || echo "0")
 
   local brief="# Decision Context ($decision_count decisions)"
 
   # ── Decisions: tag-grouped with excerpts, excluding superseded ──
   local distinct_tags
-  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.valid=1 AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
+  distinct_tags=$(sqlite3 "$dir/index.db" "SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j WHERE signals.type='decision' AND signals.private=0 AND signals.valid=1 AND signals.status='active' AND signals.tags != '[]' $superseded_in;" 2>/dev/null || echo "0")
 
   if [ "$distinct_tags" -ge 3 ]; then
     # Tag-grouped decisions
     local tag_groups
-    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 AND valid=1 $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
+    tag_groups=$(sqlite3 -separator '|' "$dir/index.db" "SELECT COALESCE(json_extract(tags, '\$[0]'), '') as primary_tag, GROUP_CONCAT('- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END, CHAR(10)) FROM signals WHERE type='decision' AND private=0 AND valid=1 AND status='active' $superseded_in GROUP BY primary_tag ORDER BY MAX(date) DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$tag_groups" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"
       while IFS='|' read -r tag entries; do
@@ -642,7 +652,7 @@ engram_brief() {
   else
     # Chronological decisions with excerpts
     local decisions
-    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END FROM signals WHERE type='decision' AND private=0 AND valid=1 $superseded_in ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
+    decisions=$(sqlite3 -separator $'\n' "$dir/index.db" "SELECT '- [' || date || '] ' || title || CASE WHEN excerpt != '' THEN ' — ' || excerpt ELSE '' END || CASE WHEN supersedes != '' THEN ' (supersedes: ' || supersedes || ')' ELSE '' END FROM signals WHERE type='decision' AND private=0 AND valid=1 AND status='active' $superseded_in ORDER BY date DESC LIMIT 15;" 2>/dev/null || echo "")
     if [ -n "$decisions" ]; then
       brief="$brief"$'\n\n'"## Recent Decisions"$'\n'"$decisions"
     fi
@@ -658,6 +668,10 @@ engram_brief() {
   if [ "$superseded_count" -gt 0 ]; then
     [ -n "$footer_parts" ] && footer_parts="$footer_parts, "
     footer_parts="${footer_parts}$superseded_count superseded signal(s)"
+  fi
+  if [ "$withdrawn_count" -gt 0 ]; then
+    [ -n "$footer_parts" ] && footer_parts="$footer_parts, "
+    footer_parts="${footer_parts}$withdrawn_count withdrawn signal(s)"
   fi
   if [ "$invalid_count" -gt 0 ]; then
     [ -n "$footer_parts" ] && footer_parts="$footer_parts, "
@@ -730,7 +744,7 @@ engram_query_relevant() {
 
   # Exclude private and superseded signals
   local results
-  results=$(sqlite3 -separator '|' "$dir/index.db" "SELECT s.date, s.title, s.excerpt FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH '$fts_query' AND s.private = 0 AND s.file_stem NOT IN (SELECT supersedes FROM signals WHERE supersedes != '') ORDER BY rank LIMIT $limit;" 2>/dev/null || echo "")
+  results=$(sqlite3 -separator '|' "$dir/index.db" "SELECT s.date, s.title, s.excerpt FROM signals_fts fts JOIN signals s ON s.id = fts.rowid WHERE signals_fts MATCH '$fts_query' AND s.private = 0 AND s.status = 'active' AND s.file_stem NOT IN (SELECT supersedes FROM signals WHERE supersedes != '') ORDER BY rank LIMIT $limit;" 2>/dev/null || echo "")
 
   [ -z "$results" ] && return 0
 

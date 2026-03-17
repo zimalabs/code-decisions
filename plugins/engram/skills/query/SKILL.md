@@ -62,6 +62,16 @@ SELECT id, title, date FROM signals WHERE private=0 ORDER BY date DESC LIMIT 20
 SELECT id, title, date FROM signals WHERE private=1 ORDER BY date DESC LIMIT 20
 ```
 
+## Status Patterns
+
+```sql
+-- Withdrawn decisions (no longer relevant but preserved for history)
+SELECT id, title, date FROM signals WHERE status='withdrawn' ORDER BY date DESC
+
+-- Active decisions only (default in brief/context)
+SELECT id, title, date FROM signals WHERE status='active' ORDER BY date DESC
+```
+
 ## Link-Aware Patterns
 
 ```sql
@@ -93,7 +103,7 @@ SQL tables:
 
 ```
 signals: id, type, title, content, tags (JSON array), source, date, file, private,
-         excerpt, supersedes, file_stem, created_at
+         excerpt, supersedes, file_stem, valid, status, created_at
 links: source_file, target_file, rel_type
 meta: key, value
 ```

@@ -66,7 +66,7 @@ engram_resync → engram_ingest_commits → engram_ingest_plans → engram_reind
 ## Schema
 
 ```sql
-signals: id, type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, created_at
+signals: id, type, title, content, tags, source, date, file, private, excerpt, supersedes, file_stem, valid, status, created_at
 signals_fts: FTS5 virtual table (title, content, tags) synced via triggers
 links: source_file, target_file, rel_type  (decision-to-decision relationships)
 meta: key, value  (stores ingestion cursors like last_commit)
