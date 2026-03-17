@@ -145,7 +145,7 @@ class EngramStore:
         created_at = sig.created_at
         if not created_at:
             try:
-                created_at = datetime.fromtimestamp(p.stat().st_birthtime, tz=UTC).isoformat()
+                created_at = datetime.fromtimestamp(p.stat().st_birthtime, tz=UTC).isoformat()  # type: ignore[attr-defined]
             except AttributeError:
                 created_at = datetime.fromtimestamp(p.stat().st_ctime, tz=UTC).isoformat()
         elif not isinstance(created_at, str):
