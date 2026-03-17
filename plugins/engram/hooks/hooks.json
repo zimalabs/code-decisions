@@ -57,6 +57,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-commit-gate.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStop": [

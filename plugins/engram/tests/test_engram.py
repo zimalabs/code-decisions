@@ -2003,6 +2003,71 @@ def test_query_relevant_excludes_withdrawn():
     assert_not_contains("hides withdrawn", result, "local disk")
 
 
+def test_pre_commit_gate():
+    print("test_pre_commit_gate:")
+    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-commit-gate.sh")
+
+    # ── No .engram directory → allow ──
+    no_engram_dir = str(TEST_DIR / "test-pre-commit-gate-no-engram")
+    Path(no_engram_dir).mkdir(parents=True, exist_ok=True)
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git commit -m \\"test\\""}}',
+        capture_output=True, text=True, cwd=no_engram_dir,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("no engram dir allows commit", output, "{}")
+
+    # ── Non-commit command → allow ──
+    d = str(TEST_DIR / "test-pre-commit-gate" / ".engram")
+    store = engram.EngramStore(d)
+    store.init()
+    store.reindex()
+
+    test_cwd = str(TEST_DIR / "test-pre-commit-gate")
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git status"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("non-commit command allowed", output, "{}")
+
+    # ── git commit with no recent decision → block ──
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_contains("blocks commit without decision", output, '"decision": "block"')
+    assert_contains("block mentions capture", output, "@engram:capture")
+
+    # ── git commit --amend → allow (bypass) ──
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git commit --amend -m \\"fix\\""}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("amend allowed", output, "{}")
+
+    # ── Write a decision signal, then commit → allow ──
+    import time
+    time.sleep(0.1)  # ensure mtime is newer than index.db
+    Path(d, "decisions", "new-feature.md").write_text(
+        "---\ntype: decision\ndate: 2026-03-17\ntags: [feature]\n---\n\n"
+        "# Add new feature\n\nThis feature improves the user experience significantly.\n"
+    )
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("allows commit with recent decision", output, "{}")
+
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -2080,6 +2145,7 @@ if __name__ == "__main__":
         test_status_withdrawn_indexed,
         test_brief_hides_withdrawn,
         test_query_relevant_excludes_withdrawn,
+        test_pre_commit_gate,
     ]
 
     for test in tests:
