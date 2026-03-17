@@ -1,12 +1,12 @@
 {
-  "description": "engram: decision capture + context injection via hooks — all deterministic command hooks, no LLM-dependent prompt hooks",
+  "description": "engram: decision capture + context injection via policy engine",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh SessionStart",
             "timeout": 15
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-end.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh SessionEnd",
             "timeout": 15
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/stop.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh Stop",
             "timeout": 5
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh PostToolUse",
             "timeout": 5
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-push-resync.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh PostToolUse",
             "timeout": 15
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh PreToolUse",
             "timeout": 5
           }
         ]
@@ -73,12 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-commit-gate.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-delete-guard.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh PreToolUse",
             "timeout": 5
           }
         ]
@@ -90,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh SubagentStop",
             "timeout": 5
           }
         ]
@@ -102,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh PreCompact",
             "timeout": 10
           }
         ]
@@ -114,7 +109,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh UserPromptSubmit",
             "timeout": 5
           }
         ]
@@ -126,7 +121,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/notification.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh Notification",
             "timeout": 5
           }
         ]

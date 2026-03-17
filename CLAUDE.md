@@ -28,6 +28,8 @@ plugins/engram/
     _frontmatter.py       # _FM_FIELDS, _split_frontmatter
     _commits.py           # _is_decision_commit, engram_path_to_keywords
     _validate.py          # _validate_content_stdin
+    _policy_defs.py       # 15 policy definitions (ALL_POLICIES)
+    policy.py             # PolicyEngine, Policy, PolicyLevel, PolicyResult, SessionState
     signal.py             # Signal dataclass
     store.py              # EngramStore class
   schema.sql              # SQLite schema (signals table + FTS5 + triggers)
@@ -35,15 +37,16 @@ plugins/engram/
     README.md             # Schema overview + shared field/link type reference
     decision.md           # Decision signal schema (source of truth)
   hooks/
-    session-start.sh      # Ingest, reindex, brief, inject context
-    session-end.sh        # Ingest, reindex, brief (no injection)
-    hooks.json            # Hook registration (SessionStart + SessionEnd)
+    dispatch.sh           # Thin dispatcher — pipes stdin to policy engine
+    hooks.json            # Hook registration (all events → dispatch.sh)
   skills/
     capture/SKILL.md      # Write signal files via Write tool (reads schemas/)
     query/SKILL.md        # SQL queries against index.db
     resync/SKILL.md       # Full sync: ingest + reindex + brief
+    policies/SKILL.md     # List active policies with levels and events
   tests/
-    test_engram.py        # Test suite (Python)
+    test_engram.py        # Test suite — store, signals, hooks (Python)
+    test_policy.py        # Test suite — policy engine + all 15 policies
     run_tests.sh          # Test runner wrapper (legacy)
 ```
 
@@ -88,10 +91,17 @@ Link rel_types: `supersedes`, `related`
 
 ## Adding a New Function
 
-1. Add the function to `plugins/engram/engram.py`
+1. Add the function to the appropriate module in `plugins/engram/engram/`
 2. Add tests to `plugins/engram/tests/test_engram.py`
-3. Wire into hooks if it should run at session start/end
+3. Wire into hooks via a new policy in `_policy_defs.py` if it should run at session events
 4. Run `make check`
+
+## Adding a New Policy
+
+1. Write a condition function in `plugins/engram/engram/_policy_defs.py`
+2. Add a `Policy(...)` instance to `ALL_POLICIES` with name, level, events, matchers
+3. Add tests to `plugins/engram/tests/test_policy.py`
+4. Run `make check` — no hooks.json changes needed (dispatch.sh routes all events)
 
 ## Testing
 

@@ -829,12 +829,12 @@ def test_session_end_output():
     subprocess.run(["git", "add", ".engram/"], check=True)
     subprocess.run(["git", "commit", "-q", "-m", "engram: init"], check=True)
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "session-end.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     empty_plans = str(TEST_DIR / "empty-plans-for-session-end")
     os.makedirs(empty_plans, exist_ok=True)
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "SessionEnd"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "ENGRAM_PLANS_DIR": empty_plans},
@@ -847,7 +847,7 @@ def test_session_end_output():
     )
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "SessionEnd"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "ENGRAM_PLANS_DIR": empty_plans},
@@ -1240,12 +1240,12 @@ def test_post_tool_context_output():
 
     store.reindex()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "post-tool-use.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-post-tool")
 
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":"src/auth/handler.ts"}}',
+        ["bash", dispatch, "PostToolUse"],
+        input='{"tool_name":"Write","tool_input":{"file_path":"src/auth/handler.ts"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-{os.getpid()}"},
@@ -1265,8 +1265,8 @@ def test_post_tool_context_output():
 
     # Skip .engram paths
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":".engram/decisions/foo.md"}}',
+        ["bash", dispatch, "PostToolUse"],
+        input='{"tool_name":"Write","tool_input":{"file_path":".engram/decisions/foo.md"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-ptu-skip-{os.getpid()}"},
@@ -1276,8 +1276,8 @@ def test_post_tool_context_output():
 
     # Skip test files
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":"tests/test_auth.rb"}}',
+        ["bash", dispatch, "PostToolUse"],
+        input='{"tool_name":"Write","tool_input":{"file_path":"tests/test_auth.rb"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-ptu-skip2-{os.getpid()}"},
@@ -1300,11 +1300,11 @@ def test_pre_compact_output():
     store.reindex()
     store.brief()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-compact.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-pre-compact")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "PreCompact"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
         cwd=test_cwd,
@@ -1325,13 +1325,14 @@ def test_stop_hook_output():
     d = str(TEST_DIR / "test-stop-hook" / ".engram")
     engram.EngramStore(d).init()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "stop.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-stop-hook")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "Stop"],
         capture_output=True, text=True,
-        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
+             "CLAUDE_SESSION_ID": f"test-stop-{os.getpid()}"},
         cwd=test_cwd,
     ).stdout.strip()
 
@@ -1349,12 +1350,13 @@ def test_stop_hook_no_engram():
     empty_dir = str(TEST_DIR / "test-stop-empty")
     os.makedirs(empty_dir, exist_ok=True)
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "stop.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "Stop"],
         capture_output=True, text=True,
-        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
+             "CLAUDE_SESSION_ID": f"test-stop-empty-{os.getpid()}"},
         cwd=empty_dir,
     ).stdout.strip()
     assert_eq("ok when no .engram", output, '{"ok": true}')
@@ -1362,11 +1364,11 @@ def test_stop_hook_no_engram():
 
 def test_user_prompt_submit_hook():
     print("test_user_prompt_submit_hook:")
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "user-prompt-submit.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"content":"fix the bug in auth.rb"}',
+        ["bash", dispatch, "UserPromptSubmit"],
+        input='{"tool_input":{"content":"fix the bug in auth.rb"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-ups-{os.getpid()}"},
@@ -1374,8 +1376,8 @@ def test_user_prompt_submit_hook():
     assert_eq("no nudge for normal prompt", output, "{}")
 
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"content":"lets go with Redis for caching"}',
+        ["bash", dispatch, "UserPromptSubmit"],
+        input='{"tool_input":{"content":"lets go with Redis for caching"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-ups-decision-{os.getpid()}"},
@@ -1383,8 +1385,8 @@ def test_user_prompt_submit_hook():
     assert_contains("nudge for decision language", output, "engram:capture")
 
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"content":"why did we choose Redis?"}',
+        ["bash", dispatch, "UserPromptSubmit"],
+        input='{"tool_input":{"content":"why did we choose Redis?"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-ups-query-{os.getpid()}"},
@@ -1394,32 +1396,34 @@ def test_user_prompt_submit_hook():
 
 def test_pre_tool_use_validation():
     print("test_pre_tool_use_validation:")
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-tool-use.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     # Non-engram file
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":"src/app.rb","content":"hello"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Write","tool_input":{"file_path":"src/app.rb","content":"hello"}}',
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
     assert_eq("non-engram file passes", output, "{}")
 
     # Valid signal
-    valid_content = r'---\ndate: 2026-03-17\ntags: [architecture]\n---\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars.'
+    valid_content = "---\ndate: 2026-03-17\ntags: [architecture]\n---\n\n# Valid decision\n\nThis is a valid lead paragraph with enough chars."
+    input_json = json.dumps({"tool_name": "Write", "tool_input": {"file_path": ".engram/decisions/valid.md", "content": valid_content}})
     output = subprocess.run(
-        ["bash", hook_script],
-        input=f'{{"tool_input":{{"file_path":".engram/decisions/valid.md","content":"{valid_content}"}}}}',
+        ["bash", dispatch, "PreToolUse"],
+        input=input_json,
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
     assert_eq("valid signal passes", output, "{}")
 
     # Missing tags
-    no_tags_content = r'---\ndate: 2026-03-17\ntags: []\n---\n\n# No tags\n\nThis decision has empty tags which should fail.'
+    no_tags_content = "---\ndate: 2026-03-17\ntags: []\n---\n\n# No tags\n\nThis decision has empty tags which should fail."
+    input_json = json.dumps({"tool_name": "Write", "tool_input": {"file_path": ".engram/decisions/no-tags.md", "content": no_tags_content}})
     output = subprocess.run(
-        ["bash", hook_script],
-        input=f'{{"tool_input":{{"file_path":".engram/decisions/no-tags.md","content":"{no_tags_content}"}}}}',
+        ["bash", dispatch, "PreToolUse"],
+        input=input_json,
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -1427,10 +1431,11 @@ def test_pre_tool_use_validation():
     assert_contains("tags error message", output, "tags")
 
     # Missing frontmatter
-    no_fm_content = r'# No frontmatter\n\nJust a plain file.'
+    no_fm_content = "# No frontmatter\n\nJust a plain file."
+    input_json = json.dumps({"tool_name": "Write", "tool_input": {"file_path": ".engram/decisions/no-fm.md", "content": no_fm_content}})
     output = subprocess.run(
-        ["bash", hook_script],
-        input=f'{{"tool_input":{{"file_path":".engram/decisions/no-fm.md","content":"{no_fm_content}"}}}}',
+        ["bash", dispatch, "PreToolUse"],
+        input=input_json,
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -1449,11 +1454,11 @@ def test_notification_hook():
 
     store.reindex()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "notification.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-notification")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "Notification"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-notif-{os.getpid()}"},
@@ -1470,7 +1475,7 @@ def test_notification_hook():
 
     store.reindex()
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "Notification"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-notif-clean-{os.getpid()}"},
@@ -1484,10 +1489,10 @@ def test_pre_compact_no_engram():
     empty_dir = str(TEST_DIR / "test-pre-compact-empty")
     os.makedirs(empty_dir, exist_ok=True)
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-compact.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "PreCompact"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
         cwd=empty_dir,
@@ -1544,7 +1549,7 @@ def test_hooks_json_structure():
     assert_contains("PostToolUse matcher has Edit", post_matcher, "Edit")
     assert_contains("PostToolUse matcher has MultiEdit", post_matcher, "MultiEdit")
 
-    # All command hooks reference .sh files
+    # All command hooks reference dispatch.sh
     all_commands = []
     for event_hooks in data.get("hooks", {}).values():
         for entry in event_hooks:
@@ -1552,8 +1557,8 @@ def test_hooks_json_structure():
                 if hook.get("type") == "command":
                     all_commands.append(hook.get("command", ""))
     total = len(all_commands)
-    sh_count = sum(1 for c in all_commands if ".sh" in c)
-    assert_eq("all commands are .sh scripts", str(sh_count), str(total))
+    dispatch_count = sum(1 for c in all_commands if "dispatch.sh" in c)
+    assert_eq("all commands use dispatch.sh", str(dispatch_count), str(total))
 
 
 def test_validate_signal_valid():
@@ -1890,11 +1895,11 @@ def test_stop_hook_backfill_nudge():
     time.sleep(1)
     Path(d, "decisions", "incomplete-stop.md").touch()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "stop.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-stop-backfill")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "Stop"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-stop-bf-{os.getpid()}"},
@@ -1917,11 +1922,11 @@ def test_notification_backfill_nudge():
 
     store.reindex()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "notification.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-notif-backfill")
 
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "Notification"],
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
              "CLAUDE_SESSION_ID": f"test-notif-bf-{os.getpid()}"},
@@ -2005,14 +2010,14 @@ def test_query_relevant_excludes_withdrawn():
 
 def test_pre_commit_gate():
     print("test_pre_commit_gate:")
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-commit-gate.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     # ── No .engram directory → allow ──
     no_engram_dir = str(TEST_DIR / "test-pre-commit-gate-no-engram")
     Path(no_engram_dir).mkdir(parents=True, exist_ok=True)
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git commit -m \\"test\\""}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"test\\""}}',
         capture_output=True, text=True, cwd=no_engram_dir,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2026,8 +2031,8 @@ def test_pre_commit_gate():
 
     test_cwd = str(TEST_DIR / "test-pre-commit-gate")
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git status"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git status"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2035,8 +2040,8 @@ def test_pre_commit_gate():
 
     # ── git commit with no recent decision → block ──
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2045,8 +2050,8 @@ def test_pre_commit_gate():
 
     # ── git commit --amend → allow (bypass) ──
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git commit --amend -m \\"fix\\""}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git commit --amend -m \\"fix\\""}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2060,8 +2065,8 @@ def test_pre_commit_gate():
         "# Add new feature\n\nThis feature improves the user experience significantly.\n"
     )
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git commit -m \\"feat: add feature\\""}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2070,7 +2075,7 @@ def test_pre_commit_gate():
 
 def test_pre_delete_guard():
     print("test_pre_delete_guard:")
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-delete-guard.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     # Setup: create .engram with a signal
     d = str(TEST_DIR / "test-pre-delete-guard" / ".engram")
@@ -2083,8 +2088,8 @@ def test_pre_delete_guard():
 
     # rm on signal file → block
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"rm .engram/decisions/keep-me.md"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"rm .engram/decisions/keep-me.md"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2093,8 +2098,8 @@ def test_pre_delete_guard():
 
     # rm -rf on .engram → block
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"rm -rf .engram"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"rm -rf .engram"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2102,8 +2107,8 @@ def test_pre_delete_guard():
 
     # git checkout -- on signal → block
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git checkout -- .engram/decisions/keep-me.md"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git checkout -- .engram/decisions/keep-me.md"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2111,8 +2116,8 @@ def test_pre_delete_guard():
 
     # git restore on signal → block
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git restore .engram/decisions/keep-me.md"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git restore .engram/decisions/keep-me.md"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2120,8 +2125,8 @@ def test_pre_delete_guard():
 
     # Non-engram rm → allow
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"rm src/old-file.py"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"rm src/old-file.py"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2129,8 +2134,8 @@ def test_pre_delete_guard():
 
     # Non-destructive git command → allow
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git status"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git status"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2139,12 +2144,13 @@ def test_pre_delete_guard():
 
 def test_pre_tool_use_edit_guard():
     print("test_pre_tool_use_edit_guard:")
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-tool-use.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     # Edit that deletes content from signal → block
+    input_json = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": ".engram/decisions/test.md", "old_string": "## Rationale\n\nThis is important.", "new_string": ""}})
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":".engram/decisions/test.md","old_string":"## Rationale\\n\\nThis is important.","new_string":""}}',
+        ["bash", dispatch, "PreToolUse"],
+        input=input_json,
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2152,18 +2158,20 @@ def test_pre_tool_use_edit_guard():
     assert_contains("mentions append-only", output, "append-only")
 
     # Edit that modifies content (non-empty new_string) → allow
+    input_json = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": ".engram/decisions/test.md", "old_string": "tags: []", "new_string": "tags: [architecture]"}})
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":".engram/decisions/test.md","old_string":"tags: []","new_string":"tags: [architecture]"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input=input_json,
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
     assert_eq("allows content-modifying edit", output, "{}")
 
     # Edit on non-engram file → allow (no old_string check)
+    input_json = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "src/app.rb", "old_string": "old", "new_string": "new"}})
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"file_path":"src/app.rb","old_string":"old","new_string":"new"}}',
+        ["bash", dispatch, "PreToolUse"],
+        input=input_json,
         capture_output=True, text=True,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2184,12 +2192,12 @@ def test_subagent_stop_context():
     store.reindex()
     store.brief()
 
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "subagent-stop.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
     test_cwd = str(TEST_DIR / "test-subagent-context")
 
     # Use unique session ID to avoid dedup
     output = subprocess.run(
-        ["bash", hook_script],
+        ["bash", dispatch, "SubagentStop"],
         input="{}",
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
@@ -2204,14 +2212,14 @@ def test_subagent_stop_context():
 
 def test_post_push_resync():
     print("test_post_push_resync:")
-    hook_script = str(SCRIPT_DIR.parent / "hooks" / "post-push-resync.sh")
+    dispatch = str(SCRIPT_DIR.parent / "hooks" / "dispatch.sh")
 
     # No .engram → pass through
     no_engram_dir = str(TEST_DIR / "test-post-push-no-engram")
     Path(no_engram_dir).mkdir(parents=True, exist_ok=True)
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git push origin main"}}',
+        ["bash", dispatch, "PostToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}',
         capture_output=True, text=True, cwd=no_engram_dir,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2224,8 +2232,8 @@ def test_post_push_resync():
     test_cwd = str(TEST_DIR / "test-post-push")
 
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git status"}}',
+        ["bash", dispatch, "PostToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git status"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()
@@ -2237,8 +2245,8 @@ def test_post_push_resync():
         "# Push test\n\nThis should be resynced after push.\n"
     )
     output = subprocess.run(
-        ["bash", hook_script],
-        input='{"tool_input":{"command":"git push origin main"}}',
+        ["bash", dispatch, "PostToolUse"],
+        input='{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}',
         capture_output=True, text=True, cwd=test_cwd,
         env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
     ).stdout.strip()

@@ -1,6 +1,7 @@
 """CLI dispatch — enables `python3 -m engram <command>`."""
 from __future__ import annotations
 
+import json
 import sys
 
 from ._commits import engram_path_to_keywords
@@ -54,6 +55,37 @@ def _cmd_validate_content() -> None:
         sys.exit(1)
 
 
+def _cmd_policy() -> None:
+    """Evaluate policies for a hook event, or list all policies."""
+    from ._policy_defs import ALL_POLICIES
+    from .policy import PolicyEngine, SessionState
+
+    event = _arg(2, "")
+
+    if not event:
+        # List mode — print all policies as JSON
+        engine = PolicyEngine()
+        for p in ALL_POLICIES:
+            engine.register(p)
+        print(json.dumps(engine.list_policies(), indent=2))
+        return
+
+    # Evaluate mode — read stdin JSON, evaluate policies, print result
+    input_text = sys.stdin.read()
+    try:
+        input_data = json.loads(input_text) if input_text.strip() else {}
+    except json.JSONDecodeError:
+        input_data = {}
+
+    engine = PolicyEngine()
+    for p in ALL_POLICIES:
+        engine.register(p)
+
+    state = SessionState()
+    result = engine.evaluate(event, input_data, state)
+    print(result)
+
+
 _COMMANDS: dict[str, callable] = {
     "init": _cmd_init,
     "resync": lambda: EngramStore(_arg(2)).resync(),
@@ -67,6 +99,7 @@ _COMMANDS: dict[str, callable] = {
     "validate-content": _cmd_validate_content,
     "ingest-commits": lambda: EngramStore(_arg(2)).ingest_commits(),
     "ingest-plans": lambda: EngramStore(_arg(2)).ingest_plans(),
+    "policy": _cmd_policy,
 }
 
 
