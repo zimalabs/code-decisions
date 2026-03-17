@@ -1869,6 +1869,14 @@ def test_find_incomplete_source_classification():
     assert_contains("finds agent-written", result, "agent-written")
     assert_contains("finds auto-ingested", result, "auto-ingested")
 
+    # Agent-written signals should report sections as a gap
+    agent_line = [l for l in result.splitlines() if "agent-written" in l][0]
+    assert_contains("agent-written has sections gap", agent_line, "sections")
+
+    # Auto-ingested signals should NOT report sections as a gap
+    auto_line = [l for l in result.splitlines() if "auto-ingested" in l][0]
+    assert_not_contains("auto-ingested skips sections gap", auto_line, "sections")
+
     agent_source = _db_scalar(f"{d}/index.db",
         "SELECT source FROM signals WHERE slug='agent-written'")
     assert_eq("agent-written has empty source", agent_source, "")

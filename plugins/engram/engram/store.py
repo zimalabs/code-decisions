@@ -593,14 +593,16 @@ class EngramStore:
             rows = conn.execute(
                 "SELECT s.slug, s.title, "
                 "CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END "
-                "|| CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
+                "|| CASE WHEN (s.source IS NULL OR s.source = '') "
+                "AND s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
                 "|| CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END "
                 "AS gap_types "
                 "FROM signals s "
                 "LEFT JOIN links l ON l.source_file = s.slug "
                 "LEFT JOIN links l2 ON l2.target_file = s.slug "
                 "WHERE (s.tags = '[]' OR s.tags = '' "
-                "OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%') "
+                "OR ((s.source IS NULL OR s.source = '') "
+                "AND s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%') "
                 "OR (l.source_file IS NULL AND l2.target_file IS NULL)) "
                 "GROUP BY s.slug "
                 "ORDER BY s.date DESC LIMIT ?",
