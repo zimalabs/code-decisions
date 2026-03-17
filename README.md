@@ -1,4 +1,5 @@
 [![CI](https://github.com/zimalabs/engram/actions/workflows/ci.yml/badge.svg)](https://github.com/zimalabs/engram/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zimalabs/engram/graph/badge.svg)](https://codecov.io/gh/zimalabs/engram)
 
 # engram
 

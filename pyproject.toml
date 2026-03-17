@@ -4,11 +4,19 @@ requires-python = ">=3.11"
 version = "0.0.0"
 
 [dependency-groups]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["plugin"]
+addopts = "--cov=engram --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+source = ["engram"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
 
 [tool.ruff]
 target-version = "py311"
