@@ -15,16 +15,8 @@
 ## Install
 
 ```sh
-claude plugin install zimalabs/engram
-```
-
-No `engram init`. No configuration needed — just install and go. Optionally configure via `.engram/config.toml`.
-
-### Local development
-
-```sh
-claude plugin marketplace add ./. --scope project
-claude plugin install engram@zimalabs --scope project
+claude plugin marketplace add zimalabs/engram
+claude plugin install engram@zimalabs
 ```
 
 > **Requires:** SQLite 3.35+ with FTS5 (ships with macOS 10.14+, most Linux distros).
@@ -63,6 +55,13 @@ Decisions show up in PRs alongside the code they describe.
 | `@engram:backfill` | Autonomously enrich incomplete decisions |
 | `@engram:introspect` | Interactive gap-filling for existing decisions |
 | `@engram:policies` | List active policies and their levels |
+
+## Development
+
+```sh
+claude plugin marketplace add ./. --scope user
+claude plugin install engram@zimalabs --scope project
+```
 
 ## Links
 

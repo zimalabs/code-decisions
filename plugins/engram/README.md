@@ -4,6 +4,15 @@
 
 A Claude Code plugin that gives your agents persistent memory of decisions. Decisions are stored as markdown files, indexed for full-text search, and injected into every session. No CLI. No commands to learn. No manual steps.
 
+## Install
+
+```sh
+claude plugin marketplace add zimalabs/engram
+claude plugin install engram@zimalabs
+```
+
+> **Requires:** SQLite 3.35+ with FTS5 (ships with macOS 10.14+, most Linux distros).
+
 ## How It Works
 
 ### First session (greenfield or brownfield)
@@ -22,10 +31,10 @@ The agent works normally. When it makes a significant decision, it writes a deci
 
 ```markdown
 # .engram/decisions/use-redis-for-caching.md
----
-date: 2026-03-14
-tags: [infrastructure, caching]
----
++++
+date = 2026-03-14
+tags = ["infrastructure", "caching"]
++++
 
 # Use Redis for caching
 
@@ -65,10 +74,10 @@ SessionEnd hook fires:
 File: `.engram/decisions/{slug}.md`
 
 ```markdown
----
-date: 2026-03-10
-tags: [api, framework]
----
++++
+date = 2026-03-10
+tags = ["api", "framework"]
++++
 
 # Use FastAPI over Django
 
@@ -94,11 +103,11 @@ When a decision replaces an older one, use `supersedes:`:
 
 ```markdown
 # .engram/decisions/use-jwt.md
----
-date: 2026-03-15
-tags: [auth]
-supersedes: use-sessions
----
++++
+date = 2026-03-15
+tags = ["auth"]
+supersedes = "use-sessions"
++++
 
 # Use JWT authentication
 
@@ -112,11 +121,11 @@ The superseded decision (`use-sessions`) is hidden from the brief but remains qu
 Use `links:` for non-supersession relationships:
 
 ```markdown
----
-date: 2026-03-15
-tags: [infrastructure]
-links: [related:redis-latency]
----
++++
+date = 2026-03-15
+tags = ["infrastructure"]
+links = ["related:redis-latency"]
++++
 
 # Switch to Redis Cluster
 
