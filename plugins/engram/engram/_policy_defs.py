@@ -10,14 +10,58 @@ from pathlib import Path
 from typing import Any
 
 from ._commits import engram_path_to_keywords
+from ._constants import _NOISE_WORDS
 from ._validate import _validate_content_stdin
 from .policy import Policy, PolicyLevel, PolicyResult, SessionState
 from .store import EngramStore
 
 ENGRAM_DIR = ".engram"
 
+# Code noise words to filter from content keyword extraction
+_CODE_NOISE = frozenset({
+    "self", "return", "import", "from", "class", "def", "none", "true",
+    "false", "with", "elif", "else", "pass", "raise", "yield", "async",
+    "await", "lambda", "assert", "global", "while", "break", "continue",
+    "except", "finally", "print", "super", "init", "args", "kwargs",
+    "dict", "list", "tuple", "str", "int", "float", "bool", "type",
+    "null", "undefined", "const", "function", "this", "that", "var",
+    "void", "new", "delete", "typeof", "instanceof", "require", "module",
+    "exports", "default", "value", "name", "data", "result", "error",
+    "string", "number", "object", "array",
+})
+
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
+def _extract_content_keywords(data: dict[str, Any], max_words: int = 3) -> list[str]:
+    """Extract meaningful words from edit/write content for search."""
+    ti = data.get("tool_input", {})
+    if not isinstance(ti, dict):
+        return []
+
+    # Prefer new_string (Edit), fall back to content (Write)
+    text = ti.get("new_string", "") or ti.get("content", "")
+    if not text:
+        return []
+
+    # Tokenize: split on non-alphanumeric, keep words >= 4 chars
+    words = re.findall(r"[a-zA-Z]{4,}", text)
+
+    # Filter noise
+    all_noise = _NOISE_WORDS | _CODE_NOISE
+    seen: set[str] = set()
+    result: list[str] = []
+    for w in words:
+        lower = w.lower()
+        if lower in all_noise or lower in seen:
+            continue
+        seen.add(lower)
+        result.append(lower)
+        if len(result) >= max_words:
+            break
+
+    return result
+
 
 def _extract_command(data: dict[str, Any]) -> str:
     """Extract command string from hook input."""
@@ -299,7 +343,9 @@ def _related_context_condition(data: dict[str, Any], state: SessionState) -> Pol
     if not index_path.is_file():
         return None
 
-    keywords = engram_path_to_keywords(fp)
+    path_keywords = engram_path_to_keywords(fp)
+    content_kw = _extract_content_keywords(data)
+    keywords = " ".join(filter(None, [path_keywords] + content_kw))
     if not keywords:
         return None
 
@@ -375,7 +421,7 @@ def _compact_context_condition(data: dict[str, Any], state: SessionState) -> Pol
 # ── NUDGE policies ──────────────────────────────────────────────────
 
 def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
-    """Nudge about decision capture after code edits (once per session)."""
+    """Nudge about decision capture after code edits (once per session, after 3+ edits)."""
     fp = _extract_file_path(data)
     if not fp:
         return None
@@ -391,6 +437,10 @@ def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> Polic
         return None
 
     if not Path(f"{ENGRAM_DIR}/decisions").is_dir():
+        return None
+
+    # Significance threshold: only nudge after 3+ qualifying edits
+    if state.edit_count() < 3:
         return None
 
     if state.has_recent_signals(ENGRAM_DIR):
@@ -438,6 +488,10 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     if not index_path.is_file():
         return PolicyResult(matched=True, ok=True)
 
+    # Read-only session guard: don't nudge if no code was edited
+    if not state.has_edits():
+        return PolicyResult(matched=True, ok=True)
+
     return PolicyResult(
         matched=True, ok=True,
         reason="No new decision signals this session. If you made significant changes, consider @engram:capture.",
@@ -464,11 +518,17 @@ def _decision_language_condition(data: dict[str, Any], state: SessionState) -> P
             reason="Past signals may exist \u2014 consider @engram:query.",
         )
 
-    # Check for decision language (once per session)
-    if re.search(
+    # Check for decision language (per-phrase dedup)
+    match = re.search(
         r"(let.?s go with|we decided|switching to|going with|the decision is|we.?ll use|agreed on|settled on)",
         prompt_lower,
-    ):
+    )
+    if match:
+        phrase = match.group(1)
+        dedup_key = f"decision-language-{phrase}"
+        if state.has_fired(dedup_key):
+            return None
+        state.mark_fired(dedup_key)
         return PolicyResult(
             matched=True, ok=True,
             reason="That sounds like a decision \u2014 consider @engram:capture.",
@@ -620,7 +680,6 @@ ALL_POLICIES: list[Policy] = [
         events=["UserPromptSubmit"],
         matchers=["*"],
         condition=_decision_language_condition,
-        once_per_session=True,
     ),
     Policy(
         name="incomplete-nudge",

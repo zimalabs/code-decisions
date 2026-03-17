@@ -25,16 +25,32 @@ class EngramStore:
         self.decisions_dir = self.root / "decisions"
         self.private_dir = self.root / "_private" / "decisions"
 
+    def load_config(self) -> dict:
+        """Load .engram/config.toml as a parsed dict."""
+        config_path = self.root / "config.toml"
+        if not config_path.is_file():
+            return {}
+        try:
+            import tomllib
+            return tomllib.loads(config_path.read_text())
+        except Exception:
+            return {}
+
+    def policy_config(self) -> dict[str, str]:
+        """Return the [policies] table from config as dict[str, str]."""
+        cfg = self.load_config()
+        policies = cfg.get("policies", {})
+        return {str(k): str(v) for k, v in policies.items()} if isinstance(policies, dict) else {}
+
+    @property
+    def trace_enabled(self) -> bool:
+        """Check if tracing is enabled in config."""
+        return bool(self.load_config().get("trace", False))
+
     @property
     def git_tracking(self) -> bool:
         """Check if git tracking is explicitly enabled via config."""
-        config = self.root / "config"
-        if not config.is_file():
-            return False
-        try:
-            return "git_tracking=true" in config.read_text().splitlines()
-        except OSError:
-            return False
+        return bool(self.load_config().get("git_tracking", False))
 
     @contextlib.contextmanager
     def connect(self):
@@ -73,15 +89,22 @@ class EngramStore:
         self.decisions_dir.mkdir(parents=True, exist_ok=True)
         self.private_dir.mkdir(parents=True, exist_ok=True)
 
+        # Copy default config if config.toml doesn't exist
+        config_toml = self.root / "config.toml"
+        if not config_toml.is_file():
+            default = engram.ENGRAM_LIB_DIR / "schemas" / "default-config.toml"
+            if default.is_file():
+                config_toml.write_text(default.read_text())
+
         # Only manage .gitignore when git tracking is enabled
         if self.git_tracking:
             gi = self.root / ".gitignore"
             if not gi.is_file():
-                gi.write_text("index.db\nbrief.md\n_private/\nconfig\n")
+                gi.write_text("index.db\nbrief.md\n_private/\nconfig.toml\n")
             else:
                 existing = gi.read_text()
                 lines = existing.splitlines()
-                for entry in ("_private/", "brief.md", "config"):
+                for entry in ("_private/", "brief.md", "config.toml"):
                     if entry not in lines:
                         existing += entry + "\n"
                 gi.write_text(existing)

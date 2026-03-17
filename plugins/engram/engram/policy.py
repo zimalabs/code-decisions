@@ -6,6 +6,7 @@ import json
 import os
 import dataclasses
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -86,6 +87,46 @@ class SessionState:
     def mark_fired(self, policy_name: str) -> None:
         (self._dir / policy_name).touch()
 
+    # ── Activity tracking ─────────────────────────────────────────────
+
+    def _activity_path(self) -> Path:
+        return self._dir / "_activity.json"
+
+    def _load_activity(self) -> dict[str, Any]:
+        p = self._activity_path()
+        if p.is_file():
+            try:
+                return json.loads(p.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {"edits": []}
+
+    def _save_activity(self, data: dict[str, Any]) -> None:
+        try:
+            self._activity_path().write_text(json.dumps(data))
+        except OSError:
+            pass
+
+    def record_edit(self, file_path: str) -> None:
+        """Record a code file edit (skips .engram/ paths)."""
+        if ".engram/" in file_path:
+            return
+        activity = self._load_activity()
+        edits = activity.get("edits", [])
+        if file_path not in edits:
+            edits.append(file_path)
+            activity["edits"] = edits
+            self._save_activity(activity)
+
+    def edit_count(self) -> int:
+        return len(self._load_activity().get("edits", []))
+
+    def files_edited(self) -> list[str]:
+        return list(self._load_activity().get("edits", []))
+
+    def has_edits(self) -> bool:
+        return self.edit_count() > 0
+
     def has_recent_signals(self, engram_dir: str = ".engram") -> bool:
         """Check if any decision file is newer than index.db."""
         root = Path(engram_dir)
@@ -126,13 +167,33 @@ class PolicyEngine:
 
     def __init__(self) -> None:
         self._policies: list[Policy] = []
+        self._disabled: set[str] = set()
+        self._last_trace: list[dict[str, Any]] = []
+        self._trace_enabled: bool = False
 
     def register(self, policy: Policy) -> None:
         self._policies.append(policy)
 
+    def apply_config(self, config: dict[str, str]) -> None:
+        """Disable policies listed as 'off' in config."""
+        self._disabled = {
+            name for name, value in config.items()
+            if value == "off"
+        }
+
     def evaluate(self, event: str, input_data: dict[str, Any],
                  session_state: SessionState) -> str:
         """Filter policies by event/matcher, run conditions, return JSON."""
+        # Record edits for activity tracking
+        if event == "PostToolUse":
+            tool_name_for_edit = input_data.get("tool_name", "")
+            if tool_name_for_edit in ("Write", "Edit", "MultiEdit"):
+                fp = input_data.get("tool_input", {})
+                if isinstance(fp, dict):
+                    file_path = fp.get("file_path", "")
+                    if file_path:
+                        session_state.record_edit(file_path)
+
         # Determine tool name from input (for matcher filtering)
         tool_name = input_data.get("tool_name", "*")
 
@@ -148,29 +209,60 @@ class PolicyEngine:
         result_ok = True
         result_reason = ""
         any_matched = False
+        self._last_trace = []
 
         for policy in matching:
-            # once_per_session check
-            if policy.once_per_session and session_state.has_fired(policy.name):
+            # Skip disabled policies
+            if policy.name in self._disabled:
+                self._last_trace.append({
+                    "policy": policy.name, "level": policy.level.name,
+                    "matched": False, "skipped": "disabled", "decision": "", "elapsed_ms": 0,
+                })
                 continue
 
+            # once_per_session check
+            if policy.once_per_session and session_state.has_fired(policy.name):
+                self._last_trace.append({
+                    "policy": policy.name, "level": policy.level.name,
+                    "matched": False, "skipped": "once_per_session", "decision": "", "elapsed_ms": 0,
+                })
+                continue
+
+            t0 = time.monotonic()
             try:
                 result = policy.condition(input_data, session_state)
             except Exception as exc:
+                elapsed = round((time.monotonic() - t0) * 1000, 1)
+                self._last_trace.append({
+                    "policy": policy.name, "level": policy.level.name,
+                    "matched": False, "skipped": f"error: {exc}", "decision": "", "elapsed_ms": elapsed,
+                })
                 print(f"engram: policy {policy.name} error: {exc}", file=sys.stderr)
                 continue
+            elapsed = round((time.monotonic() - t0) * 1000, 1)
 
             if result is None or not result.matched:
+                self._last_trace.append({
+                    "policy": policy.name, "level": policy.level.name,
+                    "matched": False, "skipped": "", "decision": "", "elapsed_ms": elapsed,
+                })
                 continue
 
             any_matched = True
+            decision = result.decision or ""
+
+            self._last_trace.append({
+                "policy": policy.name, "level": policy.level.name,
+                "matched": True, "skipped": "", "decision": decision, "elapsed_ms": elapsed,
+            })
 
             # Mark fired if once_per_session
             if policy.once_per_session:
                 session_state.mark_fired(policy.name)
 
             # BLOCK or REJECT — fail-fast
-            if result.decision in ("block", "reject"):
+            if decision in ("block", "reject"):
+                self._emit_trace(event)
                 return json.dumps(result.to_hook_json(event))
 
             # Collect messages
@@ -182,6 +274,8 @@ class PolicyEngine:
                 result_reason = result.reason
             if not result.ok:
                 result_ok = False
+
+        self._emit_trace(event)
 
         # Build merged response
         if event == "SessionStart" and merged_context:
@@ -206,6 +300,16 @@ class PolicyEngine:
             return json.dumps({"systemMessage": "\n\n".join(merged_messages)})
 
         return "{}"
+
+    def _emit_trace(self, event: str) -> None:
+        """Print one-line trace summary to stderr if tracing is enabled."""
+        if not self._trace_enabled:
+            return
+        matched = [t["policy"] for t in self._last_trace if t["matched"]]
+        if matched:
+            print(f"engram trace: {event} -> {', '.join(matched)}", file=sys.stderr)
+        else:
+            print(f"engram trace: {event} -> (none matched)", file=sys.stderr)
 
     def list_policies(self) -> list[dict[str, Any]]:
         """Return policy metadata for introspection."""

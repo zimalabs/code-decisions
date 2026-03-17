@@ -194,7 +194,7 @@ Power users can pass raw SQL queries:
 
 ## Policy Engine
 
-Engram enforces behavior through a centralized policy engine — no configuration needed. A single thin dispatcher (`dispatch.sh`) routes all hook events to `python3 -m engram policy <event>`, which evaluates 15 registered policies in priority order.
+Engram enforces behavior through a configurable policy engine. A single thin dispatcher (`dispatch.sh`) routes all hook events to `python3 -m engram policy <event>`, which evaluates 15 registered policies in priority order.
 
 ### Policy levels
 
@@ -203,7 +203,7 @@ Engram enforces behavior through a centralized policy engine — no configuratio
 | **BLOCK** | Prevents the action | `commit-gate` blocks `git commit` without a decision recorded |
 | **LIFECYCLE** | Side effects (init, resync) | `session-init` sets up `.engram/` and rebuilds the index |
 | **CONTEXT** | Injects information | `session-context` adds the brief to agent context |
-| **NUDGE** | Advisory suggestion | `capture-nudge` suggests recording a decision (once per session) |
+| **NUDGE** | Advisory suggestion | `capture-nudge` suggests recording a decision after 3+ edits |
 
 ### Active policies
 
@@ -217,15 +217,61 @@ Engram enforces behavior through a centralized policy engine — no configuratio
 | `session-cleanup` | LIFECYCLE | SessionEnd | Resyncs index at session end |
 | `push-resync` | LIFECYCLE | PostToolUse | Auto-resyncs after `git push` |
 | `session-context` | CONTEXT | SessionStart | Injects brief + behavioral instructions |
-| `related-context` | CONTEXT | PostToolUse | Injects related past decisions when editing code |
+| `related-context` | CONTEXT | PostToolUse | Injects related past decisions when editing code (path + content keywords) |
 | `subagent-context` | CONTEXT | SubagentStop | Injects brief into subagent results |
 | `compact-context` | CONTEXT | PreCompact | Regenerates brief before context compaction |
-| `capture-nudge` | NUDGE | PostToolUse | Suggests `@engram:capture` after code edits (once/session) |
-| `stop-nudge` | NUDGE | Stop | Nudges if no decisions written this session |
-| `decision-language` | NUDGE | UserPromptSubmit | Detects "let's go with…" and suggests capture |
+| `capture-nudge` | NUDGE | PostToolUse | Suggests `@engram:capture` after 3+ code edits (once/session) |
+| `stop-nudge` | NUDGE | Stop | Nudges if no decisions written this session (skips read-only sessions) |
+| `decision-language` | NUDGE | UserPromptSubmit | Detects "let's go with…" and suggests capture (per-phrase dedup) |
 | `incomplete-nudge` | NUDGE | Notification | Suggests `@engram:backfill` for incomplete decisions |
 
 List active policies anytime with `@engram:policies`.
+
+### Configuring policies
+
+Disable any policy by setting it to `"off"` in `.engram/config.toml`:
+
+```toml
+[policies]
+commit-gate = "off"
+capture-nudge = "off"
+```
+
+Disabled policies are skipped during evaluation — no code changes needed.
+
+### Evaluation trace
+
+Enable tracing to see which policies fire and why:
+
+```toml
+trace = true
+```
+
+With tracing on, each evaluation prints a one-line summary to stderr:
+
+```
+engram trace: PostToolUse -> related-context, capture-nudge
+```
+
+For detailed debugging, use the `--trace` flag:
+
+```sh
+echo '{"tool_name": "Write"}' | python3 -m engram policy --trace PostToolUse
+```
+
+This outputs `{"result": {...}, "trace": [...]}` with per-policy timing, match status, and skip reasons.
+
+### Smart nudge behavior
+
+Nudge policies avoid noise through activity-aware thresholds:
+
+- **capture-nudge** only fires after 3+ qualifying code edits (not on the first edit)
+- **stop-nudge** stays silent for read-only sessions (no code edits)
+- **decision-language** deduplicates by matched phrase — "let's go with X" early in a session doesn't suppress "we decided Y" later
+
+### Content-aware context
+
+The `related-context` policy searches for relevant past decisions using both the file path **and** the edit content. Editing `auth/middleware.py` to add `authenticate_user()` searches for both "auth middleware" and "authenticate" — finding decisions about authentication that a path-only search would miss.
 
 ### Adding a policy
 
@@ -244,19 +290,17 @@ Reviewers see **why** alongside **what**. Decision reasoning is part of the code
 
 ## Git Integration (Optional)
 
-By default, engram works standalone — no git required. To enable git commit ingestion and `.gitignore` management:
+By default, engram works standalone — no git required. To enable git commit ingestion and `.gitignore` management, set `git_tracking = true` in `.engram/config.toml`:
 
-```sh
-echo 'git_tracking=true' > .engram/config
+```toml
+git_tracking = true
 ```
 
 With git tracking enabled:
 - Commits matching decision patterns (`feat:`, `refactor:`, dependency changes) are auto-ingested as decisions
-- `.engram/.gitignore` is created/maintained to ignore `index.db`, `brief.md`, `_private/`, and `config`
+- `.engram/.gitignore` is created/maintained to ignore `index.db`, `brief.md`, `_private/`, and `config.toml`
 - Uncommitted decisions are reported in the session banner
 - Decisions show up in PRs alongside the code they describe
-
-**Existing users:** If you already have an `.engram/.gitignore`, git tracking is auto-enabled on next session start (zero breakage).
 
 | Source | How engram catches it | When |
 |---|---|---|
@@ -295,7 +339,7 @@ Use private for: messaging content, CRM data, competitive intel, personnel decis
 ├── _private/                         # excluded from brief
 │   └── decisions/
 │       └── competitor-deal.md
-├── config                            # optional (git_tracking=true)
+├── config.toml                        # settings (git_tracking, trace, policies)
 ├── brief.md                          # derived
 └── index.db                          # derived
 ```
@@ -312,7 +356,7 @@ All hook events flow through a single dispatcher:
 hooks.json → dispatch.sh <event> → python3 -m engram policy <event> → JSON response
 ```
 
-The policy engine evaluates all registered policies for that event in priority order (BLOCK → LIFECYCLE → CONTEXT → NUDGE), with per-policy exception isolation and once-per-session dedup. Session state is unified in a single `/tmp/engram-policy-{session_id}/` directory.
+The policy engine evaluates all registered policies for that event in priority order (BLOCK → LIFECYCLE → CONTEXT → NUDGE), with per-policy exception isolation, once-per-session dedup, and activity tracking. Session state — including fired policies and edit counts — is unified in a single `/tmp/engram-policy-{session_id}/` directory. Configuration (disabled policies, tracing) is read from `.engram/config.toml`.
 
 ## Comparison
 

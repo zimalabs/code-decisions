@@ -1,0 +1,7 @@
+git_tracking = false
+trace = false
+
+[policies]
+# Set any policy to "off" to disable it
+# commit-gate = "off"
+# capture-nudge = "off"

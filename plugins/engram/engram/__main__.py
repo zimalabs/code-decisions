@@ -70,6 +70,9 @@ def _cmd_policy() -> None:
         print(json.dumps(engine.list_policies(), indent=2))
         return
 
+    # Check for --trace flag
+    trace_flag = "--trace" in sys.argv
+
     # Evaluate mode — read stdin JSON, evaluate policies, print result
     input_text = sys.stdin.read()
     try:
@@ -81,9 +84,25 @@ def _cmd_policy() -> None:
     for p in ALL_POLICIES:
         engine.register(p)
 
+    # Load config and apply
+    store = EngramStore(".engram")
+    policy_cfg = store.policy_config()
+    if policy_cfg:
+        engine.apply_config(policy_cfg)
+
+    # Enable tracing from config or --trace flag
+    if trace_flag or store.trace_enabled:
+        engine._trace_enabled = True
+
     state = SessionState()
     result = engine.evaluate(event, input_data, state)
-    print(result)
+
+    # If --trace flag, output result + trace as JSON
+    if trace_flag:
+        parsed = json.loads(result) if result else {}
+        print(json.dumps({"result": parsed, "trace": engine._last_trace}, indent=2))
+    else:
+        print(result)
 
 
 _COMMANDS: dict[str, callable] = {

@@ -533,6 +533,7 @@ def test_stop_nudge_no_signals():
     try:
         from engram._policy_defs import _stop_nudge_condition
         state = _make_session_state("sn-none")
+        state.record_edit("src/main.py")  # session must have edits to trigger nudge
         result = _stop_nudge_condition({}, state)
         assert_eq("ok", result.ok, True)
         assert_contains("nudge reason", result.reason, "No new decision signals")
@@ -553,6 +554,10 @@ def test_capture_nudge_fires_on_code_edit():
     try:
         from engram._policy_defs import _capture_nudge_condition
         state = _make_session_state("cn-code")
+        # Need 3+ edits to trigger capture-nudge
+        state.record_edit("src/a.py")
+        state.record_edit("src/b.py")
+        state.record_edit("src/c.py")
         data = {"tool_input": {"file_path": "src/main.py"}}
         result = _capture_nudge_condition(data, state)
         assert_eq("matched", result.matched, True)
@@ -650,6 +655,345 @@ def test_policy_list_command():
     assert_contains("has delete-guard", str(names), "delete-guard")
 
 
+# ── Activity tracking tests (F) ──────────────────────────────────────
+
+def test_session_state_activity_tracking():
+    """SessionState tracks file edits."""
+    print("\n── test_session_state_activity_tracking ──")
+    state = _make_session_state("activity")
+    assert_eq("no edits initially", state.edit_count(), 0)
+    assert_eq("has_edits false", state.has_edits(), False)
+
+    state.record_edit("src/main.py")
+    assert_eq("one edit", state.edit_count(), 1)
+    assert_eq("has_edits true", state.has_edits(), True)
+
+    # Duplicate is ignored
+    state.record_edit("src/main.py")
+    assert_eq("no dup", state.edit_count(), 1)
+
+    state.record_edit("src/other.py")
+    assert_eq("two edits", state.edit_count(), 2)
+    assert_contains("files_edited", str(state.files_edited()), "src/main.py")
+
+
+def test_session_state_activity_skips_engram():
+    """SessionState.record_edit skips .engram/ paths."""
+    print("\n── test_session_state_activity_skips_engram ──")
+    state = _make_session_state("activity-skip")
+    state.record_edit(".engram/decisions/foo.md")
+    assert_eq("skipped engram path", state.edit_count(), 0)
+
+
+def test_engine_records_edits():
+    """PolicyEngine.evaluate records edits for PostToolUse Write/Edit/MultiEdit."""
+    print("\n── test_engine_records_edits ──")
+    engine = engram.PolicyEngine()
+    state = _make_session_state("engine-edits")
+
+    # PostToolUse Write should record the edit
+    engine.evaluate("PostToolUse", {
+        "tool_name": "Write",
+        "tool_input": {"file_path": "src/app.py", "content": "hello"},
+    }, state)
+    assert_eq("recorded write", state.edit_count(), 1)
+
+    # PostToolUse Edit should also record
+    engine.evaluate("PostToolUse", {
+        "tool_name": "Edit",
+        "tool_input": {"file_path": "src/model.py", "old_string": "x", "new_string": "y"},
+    }, state)
+    assert_eq("recorded edit", state.edit_count(), 2)
+
+    # PostToolUse Read should NOT record
+    engine.evaluate("PostToolUse", {
+        "tool_name": "Read",
+        "tool_input": {"file_path": "src/other.py"},
+    }, state)
+    assert_eq("read not recorded", state.edit_count(), 2)
+
+
+# ── TOML Config tests (A) ────────────────────────────────────────────
+
+def test_store_load_config_toml():
+    """EngramStore.load_config reads TOML config."""
+    print("\n── test_store_load_config_toml ──")
+    engram_dir, store = _make_engram("config-toml")
+    config_path = engram_dir / "config.toml"
+    config_path.write_text('git_tracking = true\ntrace = false\n\n[policies]\ncommit-gate = "off"\n')
+
+    cfg = store.load_config()
+    assert_eq("git_tracking", cfg.get("git_tracking"), True)
+    assert_eq("trace", cfg.get("trace"), False)
+    assert_eq("policy off", cfg.get("policies", {}).get("commit-gate"), "off")
+
+
+def test_store_load_config_missing():
+    """EngramStore.load_config returns empty dict when no config exists."""
+    print("\n── test_store_load_config_missing ──")
+    engram_dir, store = _make_engram("config-missing")
+    # Remove auto-created config.toml
+    config_toml = engram_dir / "config.toml"
+    if config_toml.is_file():
+        config_toml.unlink()
+
+    cfg = store.load_config()
+    assert_eq("empty config", cfg, {})
+
+
+def test_store_policy_config():
+    """EngramStore.policy_config returns policies table."""
+    print("\n── test_store_policy_config ──")
+    engram_dir, store = _make_engram("policy-config")
+    config_path = engram_dir / "config.toml"
+    config_path.write_text('[policies]\ncommit-gate = "off"\ncapture-nudge = "off"\n')
+
+    pc = store.policy_config()
+    assert_eq("commit-gate off", pc.get("commit-gate"), "off")
+    assert_eq("capture-nudge off", pc.get("capture-nudge"), "off")
+
+
+def test_store_trace_enabled():
+    """EngramStore.trace_enabled reads from config."""
+    print("\n── test_store_trace_enabled ──")
+    engram_dir, store = _make_engram("trace-config")
+    config_path = engram_dir / "config.toml"
+
+    config_path.write_text("trace = true\n")
+    assert_eq("trace on", store.trace_enabled, True)
+
+    config_path.write_text("trace = false\n")
+    assert_eq("trace off", store.trace_enabled, False)
+
+
+def test_engine_apply_config_disables():
+    """PolicyEngine.apply_config disables policies."""
+    print("\n── test_engine_apply_config_disables ──")
+
+    def always_match(d, s):
+        return engram.PolicyResult(matched=True, system_message="fired")
+
+    engine = engram.PolicyEngine()
+    engine.register(engram.Policy("p1", "", engram.PolicyLevel.NUDGE, ["PostToolUse"], ["*"], always_match))
+    engine.register(engram.Policy("p2", "", engram.PolicyLevel.NUDGE, ["PostToolUse"], ["*"], always_match))
+
+    engine.apply_config({"p1": "off"})
+
+    state = _make_session_state("disable")
+    result = json.loads(engine.evaluate("PostToolUse", {"tool_name": "Write"}, state))
+    msg = result.get("systemMessage", "")
+    # p2 should fire, p1 should not — only one "fired" message
+    assert_eq("only p2 fired", msg, "fired")
+
+
+def test_init_creates_default_config():
+    """store.init() creates config.toml from template when no config exists."""
+    print("\n── test_init_creates_default_config ──")
+    d = TEST_DIR / "init-config"
+    d.mkdir(parents=True, exist_ok=True)
+    engram_dir = d / ".engram"
+    store = engram.EngramStore(str(engram_dir))
+    store.init()
+
+    config_path = engram_dir / "config.toml"
+    assert_eq("config created", config_path.is_file(), True)
+    content = config_path.read_text()
+    assert_contains("has git_tracking", content, "git_tracking")
+    assert_contains("has policies section", content, "[policies]")
+
+
+# ── Content-aware context tests (E) ──────────────────────────────────
+
+def test_extract_content_keywords():
+    """_extract_content_keywords extracts meaningful words from edit content."""
+    print("\n── test_extract_content_keywords ──")
+    from engram._policy_defs import _extract_content_keywords
+
+    # Edit with new_string
+    data = {"tool_input": {"new_string": "def authenticate_user(self, token):\n    return verify(token)"}}
+    kw = _extract_content_keywords(data)
+    assert_contains("has authenticate", str(kw), "authenticate")
+    # 'self' and 'return' should be filtered as code noise
+    assert_not_contains("no self", str(kw), "self")
+
+    # Empty input
+    data2 = {"tool_input": {"new_string": ""}}
+    kw2 = _extract_content_keywords(data2)
+    assert_eq("empty result", kw2, [])
+
+    # Short words filtered
+    data3 = {"tool_input": {"content": "the and for"}}
+    kw3 = _extract_content_keywords(data3)
+    assert_eq("short words filtered", kw3, [])
+
+
+def test_extract_content_keywords_max():
+    """_extract_content_keywords respects max_words."""
+    print("\n── test_extract_content_keywords_max ──")
+    from engram._policy_defs import _extract_content_keywords
+    data = {"tool_input": {"new_string": "authenticate validate serialize compress encrypt"}}
+    kw = _extract_content_keywords(data, max_words=2)
+    assert_eq("max 2 words", len(kw), 2)
+
+
+# ── Smarter nudges tests (C) ─────────────────────────────────────────
+
+def test_capture_nudge_requires_3_edits():
+    """capture-nudge only fires after 3+ edits."""
+    print("\n── test_capture_nudge_requires_3_edits ──")
+    engram_dir, store = _make_engram("capture-nudge-threshold")
+    store.reindex()
+
+    orig_cwd = os.getcwd()
+    os.chdir(engram_dir.parent)
+    try:
+        from engram._policy_defs import _capture_nudge_condition
+        state = _make_session_state("cn-threshold")
+
+        # 0 edits — should not fire
+        data = {"tool_input": {"file_path": "src/main.py"}}
+        result = _capture_nudge_condition(data, state)
+        assert_eq("no fire at 0 edits", result, None)
+
+        # Record 2 edits — still shouldn't fire
+        state.record_edit("src/a.py")
+        state.record_edit("src/b.py")
+        result = _capture_nudge_condition(data, state)
+        assert_eq("no fire at 2 edits", result, None)
+
+        # Record 3rd edit — now it should fire
+        state.record_edit("src/c.py")
+        result = _capture_nudge_condition(data, state)
+        assert_eq("fires at 3 edits", result.matched, True)
+    finally:
+        os.chdir(orig_cwd)
+
+
+def test_stop_nudge_silent_for_readonly():
+    """stop-nudge doesn't nudge for read-only sessions."""
+    print("\n── test_stop_nudge_silent_for_readonly ──")
+    engram_dir, store = _make_engram("stop-nudge-readonly")
+    store.reindex()
+
+    orig_cwd = os.getcwd()
+    os.chdir(engram_dir.parent)
+    try:
+        from engram._policy_defs import _stop_nudge_condition
+        state = _make_session_state("sn-readonly")
+        # No edits recorded — read-only session
+        result = _stop_nudge_condition({}, state)
+        assert_eq("ok", result.ok, True)
+        # Should NOT have the "No new decision signals" reason
+        reason = result.reason or ""
+        assert_not_contains("no nudge for readonly", reason, "No new decision signals")
+    finally:
+        os.chdir(orig_cwd)
+
+
+def test_stop_nudge_fires_with_edits():
+    """stop-nudge nudges when session has edits but no signals."""
+    print("\n── test_stop_nudge_fires_with_edits ──")
+    engram_dir, store = _make_engram("stop-nudge-edits")
+    store.reindex()
+
+    orig_cwd = os.getcwd()
+    os.chdir(engram_dir.parent)
+    try:
+        from engram._policy_defs import _stop_nudge_condition
+        state = _make_session_state("sn-edits")
+        state.record_edit("src/main.py")
+        result = _stop_nudge_condition({}, state)
+        assert_eq("ok", result.ok, True)
+        assert_contains("nudge with edits", result.reason, "No new decision signals")
+    finally:
+        os.chdir(orig_cwd)
+
+
+def test_decision_language_per_phrase_dedup():
+    """decision-language deduplicates by matched phrase, not globally."""
+    print("\n── test_decision_language_per_phrase_dedup ──")
+    from engram._policy_defs import _decision_language_condition
+    state = _make_session_state("dl-dedup")
+
+    # First "let's go with" match
+    data1 = {"tool_input": {"content": "Let's go with PostgreSQL"}}
+    r1 = _decision_language_condition(data1, state)
+    assert_eq("first match", r1.matched, True)
+
+    # Same phrase again — should be suppressed
+    data2 = {"tool_input": {"content": "Let's go with MySQL instead"}}
+    r2 = _decision_language_condition(data2, state)
+    assert_eq("same phrase suppressed", r2, None)
+
+    # Different phrase — should fire
+    data3 = {"tool_input": {"content": "We decided on Redis"}}
+    r3 = _decision_language_condition(data3, state)
+    assert_eq("different phrase fires", r3.matched, True)
+
+
+# ── Trace tests (B) ─────────────────────────────────────────────────
+
+def test_engine_trace_collection():
+    """PolicyEngine collects trace entries during evaluate."""
+    print("\n── test_engine_trace_collection ──")
+
+    def match_policy(d, s):
+        return engram.PolicyResult(matched=True, system_message="hit")
+
+    def skip_policy(d, s):
+        return None
+
+    engine = engram.PolicyEngine()
+    engine.register(engram.Policy("p-match", "", engram.PolicyLevel.NUDGE, ["PostToolUse"], ["*"], match_policy))
+    engine.register(engram.Policy("p-skip", "", engram.PolicyLevel.NUDGE, ["PostToolUse"], ["*"], skip_policy))
+
+    state = _make_session_state("trace")
+    engine.evaluate("PostToolUse", {"tool_name": "Write"}, state)
+
+    assert_eq("trace has 2 entries", len(engine._last_trace), 2)
+    assert_eq("first matched", engine._last_trace[0]["matched"], True)
+    assert_eq("first policy", engine._last_trace[0]["policy"], "p-match")
+    assert_eq("second not matched", engine._last_trace[1]["matched"], False)
+
+
+def test_engine_trace_disabled_policy():
+    """Trace shows disabled policies as skipped."""
+    print("\n── test_engine_trace_disabled_policy ──")
+
+    def always(d, s):
+        return engram.PolicyResult(matched=True, system_message="x")
+
+    engine = engram.PolicyEngine()
+    engine.register(engram.Policy("enabled", "", engram.PolicyLevel.NUDGE, ["PostToolUse"], ["*"], always))
+    engine.register(engram.Policy("disabled", "", engram.PolicyLevel.NUDGE, ["PostToolUse"], ["*"], always))
+    engine.apply_config({"disabled": "off"})
+
+    state = _make_session_state("trace-disabled")
+    engine.evaluate("PostToolUse", {"tool_name": "Write"}, state)
+
+    disabled_trace = [t for t in engine._last_trace if t["policy"] == "disabled"]
+    assert_eq("disabled traced", len(disabled_trace), 1)
+    assert_eq("skipped reason", disabled_trace[0]["skipped"], "disabled")
+
+
+def test_policy_command_with_trace():
+    """python3 -m engram policy --trace outputs trace JSON."""
+    print("\n── test_policy_command_with_trace ──")
+    import subprocess
+
+    parent_dir = str(Path(__file__).resolve().parent.parent)
+    result = subprocess.run(
+        [sys.executable, "-m", "engram", "policy", "--trace", "PostToolUse"],
+        input='{"tool_name": "Read"}',
+        capture_output=True, text=True,
+        env={**os.environ, "PYTHONPATH": parent_dir},
+    )
+    assert_eq("exit code", result.returncode, 0)
+    output = json.loads(result.stdout)
+    assert_contains("has result", str(output), "result")
+    assert_contains("has trace", str(output), "trace")
+
+
 # ── Runner ──────────────────────────────────────────────────────────
 
 def main():
@@ -689,6 +1033,34 @@ def main():
     test_session_state_recent_signals()
     test_full_engine_with_all_policies()
     test_policy_list_command()
+
+    # Activity tracking (F)
+    test_session_state_activity_tracking()
+    test_session_state_activity_skips_engram()
+    test_engine_records_edits()
+
+    # TOML Config (A)
+    test_store_load_config_toml()
+    test_store_load_config_missing()
+    test_store_policy_config()
+    test_store_trace_enabled()
+    test_engine_apply_config_disables()
+    test_init_creates_default_config()
+
+    # Content-aware context (E)
+    test_extract_content_keywords()
+    test_extract_content_keywords_max()
+
+    # Smarter nudges (C)
+    test_capture_nudge_requires_3_edits()
+    test_stop_nudge_silent_for_readonly()
+    test_stop_nudge_fires_with_edits()
+    test_decision_language_per_phrase_dedup()
+
+    # Trace (B)
+    test_engine_trace_collection()
+    test_engine_trace_disabled_policy()
+    test_policy_command_with_trace()
 
     # Summary
     print(f"\n{'=' * 40}")

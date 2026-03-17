@@ -91,7 +91,7 @@ def assert_file_count(name, directory, expected):
 
 
 def _enable_git_tracking(dir_path):
-    Path(dir_path, "config").write_text("git_tracking=true\n")
+    Path(dir_path, "config.toml").write_text("git_tracking = true\n")
 
 
 def _create_test_repo(repo_dir, num_commits=5):
@@ -1747,7 +1747,7 @@ def test_git_tracking_config():
     else:
         _fail("enabled after config", "returned false")
 
-    Path(d, "config").write_text("git_tracking=false\n")
+    Path(d, "config.toml").write_text("git_tracking = false\n")
     if not store.git_tracking:
         _pass("false value not enabled")
     else:
@@ -1764,10 +1764,10 @@ def test_init_no_gitignore_by_default():
     else:
         _fail("no gitignore created", "file exists")
 
-    if not Path(d, "config").is_file():
-        _pass("no config created")
+    if Path(d, "config.toml").is_file():
+        _pass("config.toml created")
     else:
-        _fail("no config created", "file exists")
+        _fail("config.toml created", "file missing")
 
 
 def test_init_gitignore_with_git_tracking():

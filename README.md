@@ -7,9 +7,10 @@
 ## What it does
 
 - **Records decisions as markdown files** — the "why" behind code changes, not just the "what"
-- **Auto-captures from git commits** — brownfield bootstrap from your existing history
+- **Auto-captures from git commits** — decision-worthy commits become decisions automatically (opt-in)
 - **Full-text search via SQLite FTS5** — query past decisions in natural language or raw SQL
 - **Context injection** — relevant decisions surface automatically via session hooks
+- **Policy engine** — configurable policies enforce discipline and inject context. Disable any policy via `config.toml`
 
 ## Install
 
@@ -17,7 +18,7 @@
 claude plugin install zimalabs/engram
 ```
 
-No `engram init`. No configuration. Just install and go.
+No `engram init`. No configuration needed — just install and go. Optionally configure via `.engram/config.toml`.
 
 ### Local development
 
