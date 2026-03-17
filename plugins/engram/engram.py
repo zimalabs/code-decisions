@@ -6,6 +6,8 @@ Stdlib only: sqlite3, json, re, subprocess, pathlib, os, sys.
 """
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import json
 import os
 import re
@@ -14,7 +16,8 @@ import subprocess
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import TypedDict
+
+__all__ = ["EngramStore", "Signal", "engram_path_to_keywords"]
 
 # Resolve schema.sql relative to this file
 ENGRAM_LIB_DIR = Path(__file__).resolve().parent
@@ -53,14 +56,16 @@ _NOISE_WORDS = frozenset("src lib app index test spec the and is of to in for a 
 StrPath = str | Path
 
 
-class SignalMeta(TypedDict):
-    type: str
-    date: str
-    tags: str
-    source: str
-    supersedes: str
-    links: str
-    status: str
+# ── SQLite helper ────────────────────────────────────────────────────
+
+@contextlib.contextmanager
+def _connect(db_path: StrPath):
+    """Context manager for SQLite connections."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # ── FTS5 check ───────────────────────────────────────────────────────
@@ -68,11 +73,8 @@ class SignalMeta(TypedDict):
 def _check_fts5() -> bool:
     """Verify SQLite FTS5 module is available."""
     try:
-        conn = sqlite3.connect(":memory:")
-        try:
+        with _connect(":memory:") as conn:
             conn.execute("CREATE VIRTUAL TABLE _fts5_test USING fts5(x);")
-        finally:
-            conn.close()
     except sqlite3.OperationalError:
         print("engram: SQLite FTS5 module not available.", file=sys.stderr)
         print("engram: Install SQLite with FTS5 support:", file=sys.stderr)
@@ -81,19 +83,6 @@ def _check_fts5() -> bool:
         print("engram:   Alpine: apk add sqlite", file=sys.stderr)
         return False
     return True
-
-
-# ── Config ───────────────────────────────────────────────────────────
-
-def _git_tracking_enabled(dir_path: StrPath) -> bool:
-    """Check if git tracking is explicitly enabled via config."""
-    config = Path(dir_path) / "config"
-    if not config.is_file():
-        return False
-    try:
-        return "git_tracking=true" in config.read_text().splitlines()
-    except OSError:
-        return False
 
 
 # ── Slug helpers ─────────────────────────────────────────────────────
@@ -110,14 +99,6 @@ def _slugify(text: str) -> str:
 def _slug(filepath: StrPath) -> str:
     """Extract slug from filepath (basename without .md)."""
     return Path(filepath).stem
-
-
-def _extract_excerpt(body: str) -> str:
-    """First non-empty, non-heading line of body, truncated to 120 chars."""
-    for line in body.splitlines():
-        if line and not line.startswith("#"):
-            return line[:120]
-    return ""
 
 
 def _normalize_tags(raw: str) -> str:
@@ -148,137 +129,150 @@ def _parse_links(s: str) -> list[tuple[str, str]]:
 
 # ── Frontmatter parser (shared) ─────────────────────────────────────
 
-def _parse_frontmatter(text: str) -> tuple[SignalMeta, str, str]:
-    """Parse markdown with YAML frontmatter.
+# Field name → transform function for frontmatter parsing
+_FM_FIELDS: dict[str, callable] = {
+    "type": str.strip,
+    "date": str.strip,
+    "tags": _normalize_tags,
+    "source": str.strip,
+    "supersedes": str.strip,
+    "links": str.strip,
+    "status": str.strip,
+}
 
-    Returns (metadata_dict, title, body) where:
-    - metadata_dict has keys: type, date, tags, source, supersedes, links, status
-    - title is the first H1 heading (without '# ')
-    - body is everything after the title
+
+def _split_frontmatter(text: str) -> tuple[list[str], list[str]]:
+    """Split markdown into (frontmatter_lines, content_lines).
+
+    Returns raw line lists — frontmatter lines exclude the --- delimiters.
+    If no valid frontmatter, returns ([], all_lines).
     """
     lines = text.splitlines()
-    meta = {
-        "type": "",
-        "date": "",
-        "tags": "[]",
-        "source": "",
-        "supersedes": "",
-        "links": "",
-        "status": "active",
-    }
-    title = ""
-    body_lines = []
+    if not lines or lines[0] != "---":
+        return [], lines
 
-    in_frontmatter = False
-    has_open = False
-    past_frontmatter = False
-    found_title = False
+    for i, line in enumerate(lines[1:], 1):
+        if line == "---":
+            return lines[1:i], lines[i + 1:]
 
-    for line in lines:
-        if not past_frontmatter:
-            if line == "---":
-                if not has_open:
-                    has_open = True
-                    in_frontmatter = True
-                    continue
-                else:
-                    past_frontmatter = True
-                    continue
-            if in_frontmatter:
-                if line.startswith("type:"):
-                    meta["type"] = line[len("type:"):].strip()
-                elif line.startswith("date:"):
-                    meta["date"] = line[len("date:"):].strip()
-                elif line.startswith("tags:"):
-                    meta["tags"] = _normalize_tags(line[len("tags:"):].strip())
-                elif line.startswith("source:"):
-                    meta["source"] = line[len("source:"):].strip()
-                elif line.startswith("supersedes:"):
-                    meta["supersedes"] = line[len("supersedes:"):].strip()
-                elif line.startswith("links:"):
-                    meta["links"] = line[len("links:"):].strip()
-                elif line.startswith("status:"):
-                    meta["status"] = line[len("status:"):].strip()
+    return [], lines
+
+
+# ── Signal dataclass ─────────────────────────────────────────────────
+
+@dataclasses.dataclass
+class Signal:
+    """Parsed representation of a signal markdown file."""
+    title: str = ""
+    body: str = ""
+    sig_type: str = "decision"
+    date: str = ""
+    tags: str = "[]"
+    source: str = ""
+    supersedes: str = ""
+    links: str = ""
+    status: str = "active"
+    _has_frontmatter: bool = dataclasses.field(default=True, repr=False)
+
+    @classmethod
+    def from_text(cls, text: str) -> Signal:
+        """Parse markdown with YAML frontmatter into a Signal."""
+        meta: dict[str, str] = {
+            "type": "",
+            "date": "",
+            "tags": "[]",
+            "source": "",
+            "supersedes": "",
+            "links": "",
+            "status": "active",
+        }
+
+        fm_lines, content_lines = _split_frontmatter(text)
+        has_fm = bool(fm_lines) or text.splitlines()[:1] == ["---"]
+
+        for line in fm_lines:
+            key, _, val = line.partition(":")
+            if key in _FM_FIELDS:
+                meta[key] = _FM_FIELDS[key](val)
+
+        title = ""
+        body_lines = []
+        found_title = False
+        for line in content_lines:
+            if not found_title and line.startswith("# "):
+                title = line[2:]
+                found_title = True
                 continue
-            # No frontmatter opened yet, treat as body
-            continue
+            body_lines.append(line)
 
-        # Past frontmatter
-        if not found_title and line.startswith("# "):
-            title = line[2:]
-            found_title = True
-            continue
-        body_lines.append(line)
+        body = "\n".join(body_lines) + "\n" if body_lines else ""
 
-    body = "\n".join(body_lines) + "\n" if body_lines else ""
-    return meta, title, body
+        return cls(
+            title=title,
+            body=body,
+            sig_type=meta["type"] or "decision",
+            date=meta["date"],
+            tags=meta["tags"],
+            source=meta["source"],
+            supersedes=meta["supersedes"],
+            links=meta["links"],
+            status=meta["status"],
+            _has_frontmatter=has_fm,
+        )
 
+    @classmethod
+    def from_file(cls, filepath: StrPath) -> Signal:
+        """Read and parse a signal file."""
+        text = Path(filepath).read_text(errors="replace")
+        return cls.from_text(text)
 
-# ── Signal validation ────────────────────────────────────────────────
+    @property
+    def excerpt(self) -> str:
+        """First non-empty, non-heading line of body, truncated to 120 chars."""
+        for line in self.body.splitlines():
+            if line and not line.startswith("#"):
+                return line[:120]
+        return ""
 
-def _validate_signal(filepath: StrPath) -> tuple[bool, str]:
-    """Validate a signal file. Returns (ok, errors_string)."""
-    text = Path(filepath).read_text(errors="replace")
-    errors = []
+    @property
+    def content(self) -> str:
+        """Title + newline + body."""
+        return self.title + "\n" + self.body
 
-    lines = text.splitlines()
-    has_open = False
-    has_close = False
-    in_frontmatter = False
-    has_date = False
-    has_tags = False
-    tags_empty = True
-    has_title = False
-    past_frontmatter = False
-    past_title = False
-    lead_paragraph = ""
+    def validate(self) -> tuple[bool, str]:
+        """Validate signal fields. Returns (ok, errors_string)."""
+        errors = []
 
-    for line in lines:
-        if not past_frontmatter:
-            if line == "---":
-                if not has_open:
-                    has_open = True
-                    in_frontmatter = True
+        if not self._has_frontmatter:
+            errors.append("missing frontmatter delimiters (---)")
+        else:
+            # Check date
+            if not self.date or not re.match(r"^\d{4}-\d{2}-\d{2}$", self.date):
+                errors.append("missing or invalid date: field (need YYYY-MM-DD)")
+
+            # Check tags
+            if not self.tags or self.tags == "[]":
+                errors.append("tags: must have at least one tag (not empty [])")
+
+        # Check title and lead paragraph
+        if not self.title:
+            errors.append("missing H1 title (# ...)")
+
+        lead_paragraph = ""
+        for line in self.body.splitlines():
+            if not lead_paragraph:
+                if not line or line.startswith("#"):
                     continue
-                else:
-                    has_close = True
-                    past_frontmatter = True
-                    continue
-            if in_frontmatter:
-                if line.startswith("date:"):
-                    val = line[len("date:"):].strip()
-                    if re.match(r"^\d{4}-\d{2}-\d{2}$", val):
-                        has_date = True
-                elif line.startswith("tags:"):
-                    val = line[len("tags:"):].strip()
-                    has_tags = True
-                    if val and val != "[]":
-                        tags_empty = False
-                continue
+                lead_paragraph = line
 
-        # Past frontmatter
-        if not has_title and line.startswith("# "):
-            has_title = True
-            past_title = True
-            continue
+        if not lead_paragraph or len(lead_paragraph) < 20:
+            errors.append("lead paragraph after title must exist and be >= 20 chars (explains why)")
 
-        if past_title and not lead_paragraph:
-            if not line or line.startswith("#"):
-                continue
-            lead_paragraph = line
+        return (len(errors) == 0, "; ".join(errors) + "; " if errors else "")
 
-    if not has_open or not has_close:
-        errors.append("missing frontmatter delimiters (---)")
-    if not has_date:
-        errors.append("missing or invalid date: field (need YYYY-MM-DD)")
-    if not has_tags or tags_empty:
-        errors.append("tags: must have at least one tag (not empty [])")
-    if not has_title:
-        errors.append("missing H1 title (# ...)")
-    if not lead_paragraph or len(lead_paragraph) < 20:
-        errors.append("lead paragraph after title must exist and be >= 20 chars (explains why)")
-
-    return (len(errors) == 0, "; ".join(errors) + "; " if errors else "")
+    def parsed_links(self) -> list[tuple[str, str]]:
+        """Parse links field into list of (rel, target)."""
+        return _parse_links(self.links)
 
 
 # ── Commit classification ────────────────────────────────────────────
@@ -317,517 +311,6 @@ def _is_decision_commit(subject: str, commit_hash: str) -> bool:
     return False
 
 
-# ── Init ─────────────────────────────────────────────────────────────
-
-def engram_init(dir_path: StrPath) -> bool:
-    """Initialize .engram directory structure and index.db."""
-    if not _check_fts5():
-        return False
-    d = Path(dir_path)
-    (d / "decisions").mkdir(parents=True, exist_ok=True)
-    (d / "_private" / "decisions").mkdir(parents=True, exist_ok=True)
-
-    # Only manage .gitignore when git tracking is enabled
-    if _git_tracking_enabled(dir_path):
-        gi = d / ".gitignore"
-        if not gi.is_file():
-            gi.write_text("index.db\nbrief.md\n_private/\nconfig\n")
-        else:
-            existing = gi.read_text()
-            lines = existing.splitlines()
-            for entry in ("_private/", "brief.md", "config"):
-                if entry not in lines:
-                    existing += entry + "\n"
-            gi.write_text(existing)
-
-    db_path = d / "index.db"
-    if not db_path.is_file():
-        conn = sqlite3.connect(str(db_path))
-        try:
-            conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
-        finally:
-            conn.close()
-    return True
-
-
-# ── Index file ───────────────────────────────────────────────────────
-
-def _index_file(dir_path: StrPath, filepath: StrPath, private: int = 0) -> None:
-    """Parse a signal markdown file and insert into index.db."""
-    text = Path(filepath).read_text(errors="replace")
-    meta, title, body = _parse_frontmatter(text)
-
-    if not meta["date"]:
-        meta["date"] = date.today().isoformat()
-    if not title:
-        title = Path(filepath).stem
-
-    sig_type = meta["type"] or "decision"
-    slug = _slug(filepath)
-    excerpt = _extract_excerpt(body)
-
-    # Normalize status
-    if meta["status"] not in ("active", "withdrawn"):
-        meta["status"] = "active"
-
-    # Validate — invalid overrides frontmatter status
-    ok, _ = _validate_signal(filepath)
-    if not ok:
-        meta["status"] = "invalid"
-        print(f"engram: warning: {Path(filepath).name} is incomplete (missing rationale)", file=sys.stderr)
-
-    content = title + "\n" + body
-
-    db_path = Path(dir_path) / "index.db"
-    conn = sqlite3.connect(str(db_path))
-    try:
-        conn.execute(
-            "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (sig_type, title, content, meta["tags"], meta["source"], meta["date"],
-             str(filepath), private, excerpt, slug, meta["status"]),
-        )
-
-        # Insert supersedes link
-        if meta["supersedes"]:
-            conn.execute(
-                "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, 'supersedes')",
-                (slug, meta["supersedes"]),
-            )
-
-        # Insert other links
-        if meta["links"]:
-            for rel, target in _parse_links(meta["links"]):
-                conn.execute(
-                    "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, ?)",
-                    (slug, target, rel),
-                )
-
-        conn.commit()
-    finally:
-        conn.close()
-
-
-# ── Reindex ──────────────────────────────────────────────────────────
-
-def engram_reindex(dir_path: StrPath) -> None:
-    """Destructive rebuild of index.db from signal files. Preserves meta table."""
-    d = Path(dir_path)
-    db_path = d / "index.db"
-
-    # Preserve meta table data
-    meta_backup: list[tuple[str, str]] = []
-    if db_path.is_file():
-        try:
-            conn = sqlite3.connect(str(db_path))
-            try:
-                meta_backup = conn.execute("SELECT key, value FROM meta").fetchall()
-            finally:
-                conn.close()
-        except sqlite3.Error:
-            pass
-
-    # Recreate index from scratch
-    if db_path.is_file():
-        db_path.unlink()
-    conn = sqlite3.connect(str(db_path))
-    try:
-        conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
-
-        # Restore meta data
-        for key, value in meta_backup:
-            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
-        conn.commit()
-    finally:
-        conn.close()
-
-    # Index public signals
-    decisions_dir = d / "decisions"
-    if decisions_dir.is_dir():
-        for f in sorted(decisions_dir.glob("*.md")):
-            _index_file(dir_path, str(f), private=0)
-
-    # Index private signals
-    private_dir = d / "_private" / "decisions"
-    if private_dir.is_dir():
-        for f in sorted(private_dir.glob("*.md")):
-            _index_file(dir_path, str(f), private=1)
-
-
-# ── Commit ingestion ─────────────────────────────────────────────────
-
-def engram_ingest_commits(dir_path: StrPath) -> None:
-    """Ingest decision-worthy commits as signal files."""
-    if not _git_tracking_enabled(dir_path):
-        return
-
-    # Must be in a git repo
-    try:
-        subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                       capture_output=True, check=True)
-    except (OSError, subprocess.CalledProcessError):
-        return
-
-    d = Path(dir_path)
-    db_path = d / "index.db"
-
-    last_commit = ""
-    if db_path.is_file():
-        try:
-            conn = sqlite3.connect(str(db_path))
-            try:
-                row = conn.execute("SELECT value FROM meta WHERE key = 'last_commit'").fetchone()
-                if row:
-                    last_commit = row[0]
-            finally:
-                conn.close()
-        except sqlite3.Error:
-            pass
-
-    # Get log output
-    if not last_commit:
-        cmd = ["git", "log", "-50", "--format=%H|%s|%ai"]
-    else:
-        cmd = ["git", "log", f"{last_commit}..HEAD", "--format=%H|%s|%ai"]
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-        log_output = result.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return
-
-    if not log_output:
-        return
-
-    new_head = ""
-    decisions_dir = d / "decisions"
-    private_dir = d / "_private" / "decisions"
-
-    for line in log_output.splitlines():
-        parts = line.split("|", 2)
-        if len(parts) < 3:
-            continue
-        commit_hash, subject, date_str = parts
-
-        if not new_head:
-            new_head = commit_hash
-
-        if not _is_decision_commit(subject, commit_hash):
-            continue
-
-        # Dedup: skip if file with this source already exists
-        source_tag = f"source: git:{commit_hash}"
-        found = False
-        for search_dir in (decisions_dir, private_dir):
-            if search_dir.is_dir():
-                for f in search_dir.glob("*.md"):
-                    if source_tag in f.read_text(errors="replace"):
-                        found = True
-                        break
-            if found:
-                break
-        if found:
-            continue
-
-        commit_date = date_str.split()[0] if date_str else date.today().isoformat()
-        slug = _slugify(subject)
-        if not slug:
-            slug = f"commit-{commit_hash[:7]}"
-
-        filepath = decisions_dir / f"{slug}.md"
-
-        # Manual signal with same slug already exists — defer to it
-        if filepath.is_file():
-            continue
-        if (private_dir / f"{slug}.md").is_file():
-            continue
-
-        # Get diff stat
-        try:
-            stat_result = subprocess.run(
-                ["git", "show", "--stat", "--format=", commit_hash],
-                capture_output=True, text=True, errors="replace",
-            )
-            stat = stat_result.stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            stat = ""
-
-        # Extract commit body, strip Co-Authored-By trailers
-        try:
-            body_result = subprocess.run(
-                ["git", "log", "-1", "--format=%b", commit_hash],
-                capture_output=True, text=True, errors="replace",
-            )
-            body = body_result.stdout
-            # Strip Co-Authored-By lines
-            body = "\n".join(
-                line for line in body.splitlines()
-                if not line.lower().startswith("co-authored-by:")
-            ).strip()
-        except (OSError, subprocess.SubprocessError):
-            body = ""
-
-        # Build signal content
-        signal = f"---\ntype: decision\ndate: {commit_date}\nsource: git:{commit_hash}\n---\n\n# {subject}\n\n"
-        if body:
-            signal += f"{body}\n\n{stat}\n"
-        else:
-            signal += f"{stat}\n"
-
-        filepath.write_text(signal)
-
-    # Update last_commit pointer
-    if new_head:
-        try:
-            conn = sqlite3.connect(str(db_path))
-            try:
-                conn.execute(
-                    "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_commit', ?)",
-                    (new_head,),
-                )
-                conn.commit()
-            finally:
-                conn.close()
-        except sqlite3.Error:
-            pass
-
-
-# ── Plan ingestion ───────────────────────────────────────────────────
-
-def engram_ingest_plans(dir_path: StrPath) -> None:
-    """Ingest Claude Code plan files as decision signals."""
-    d = Path(dir_path)
-    db_path = d / "index.db"
-
-    # Resolve project-scoped plans directory
-    plans_dir = os.environ.get("ENGRAM_PLANS_DIR", "")
-    if not plans_dir:
-        project_key = os.getcwd().replace("/", "-")
-        plans_dir = os.path.expanduser(f"~/.claude/projects/{project_key}/plans")
-
-    plans_path = Path(plans_dir)
-
-    # Safety: never ingest from the global plans directory
-    global_plans = Path.home() / ".claude" / "plans"
-    try:
-        if global_plans.exists() and plans_path.exists():
-            if plans_path.resolve() == global_plans.resolve():
-                return
-    except OSError:
-        pass
-
-    if not plans_path.is_dir():
-        return
-
-    # Check last ingest timestamp
-    last_ingest = ""
-    if db_path.is_file():
-        try:
-            conn = sqlite3.connect(str(db_path))
-            try:
-                row = conn.execute("SELECT value FROM meta WHERE key = 'last_plan_ingest'").fetchone()
-                if row:
-                    last_ingest = row[0]
-            finally:
-                conn.close()
-        except sqlite3.Error:
-            pass
-
-    # Find plan files
-    plan_files = list(plans_path.glob("*.md"))
-    if last_ingest and db_path.is_file():
-        db_mtime = db_path.stat().st_mtime
-        plan_files = [f for f in plan_files if f.stat().st_mtime > db_mtime]
-
-    if not plan_files:
-        return
-
-    decisions_dir = d / "decisions"
-    today = date.today().isoformat()
-
-    for plan_file in plan_files:
-        basename = plan_file.stem
-
-        # Dedup: skip if file with this source already exists
-        source_tag = f"source: plan:{basename}"
-        found = False
-        if decisions_dir.is_dir():
-            for f in decisions_dir.glob("*.md"):
-                if source_tag in f.read_text(errors="replace"):
-                    found = True
-                    break
-        if found:
-            continue
-
-        # Extract title and context
-        text = plan_file.read_text(errors="replace")
-        title = ""
-        for line in text.splitlines():
-            if line.startswith("# "):
-                title = line[2:]
-                break
-        if not title:
-            title = basename
-
-        # Extract context section
-        context_lines = []
-        in_context = False
-        for line in text.splitlines():
-            if line.startswith("## Context"):
-                in_context = True
-                continue
-            if in_context and line.startswith("## "):
-                break
-            if in_context:
-                context_lines.append(line)
-        context = "\n".join(context_lines).strip()
-
-        if not context:
-            continue
-
-        slug = _slugify(title)
-        if not slug:
-            slug = f"plan-{basename}"
-
-        filepath = decisions_dir / f"plan-{slug}.md"
-        signal = f"---\ntype: decision\ndate: {today}\nsource: plan:{basename}\n---\n\n# {title}\n\n{context}\n"
-        filepath.write_text(signal)
-
-    # Update last_plan_ingest timestamp
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        conn = sqlite3.connect(str(db_path))
-        try:
-            conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_plan_ingest', ?)",
-                (now,),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    except sqlite3.Error:
-        pass
-
-
-# ── Brief generation ─────────────────────────────────────────────────
-
-def engram_brief(dir_path: StrPath) -> None:
-    """Generate brief.md summary of decisions."""
-    d = Path(dir_path)
-    db_path = d / "index.db"
-    if not db_path.is_file():
-        return
-
-    conn = sqlite3.connect(str(db_path))
-    try:
-        # Build superseded set
-        superseded_slugs = [
-            row[0] for row in
-            conn.execute("SELECT target_file FROM links WHERE rel_type='supersedes'").fetchall()
-        ]
-
-        superseded_count = len(superseded_slugs)
-
-        # Build SQL exclusion for superseded slugs
-        superseded_clause = ""
-        superseded_params: list[str] = []
-        if superseded_slugs:
-            placeholders = ",".join("?" * len(superseded_slugs))
-            superseded_clause = f"AND slug NOT IN ({placeholders})"
-            superseded_params = superseded_slugs
-
-        # Counts
-        decision_count = conn.execute(
-            "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='active'"
-        ).fetchone()[0]
-
-        invalid_count = conn.execute(
-            "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='invalid'"
-        ).fetchone()[0]
-
-        withdrawn_count = conn.execute(
-            "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn'"
-        ).fetchone()[0]
-
-        brief = f"# Decision Context ({decision_count} decisions)"
-
-        # Check distinct tag count
-        distinct_tags = conn.execute(
-            f"SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j "
-            f"WHERE signals.type='decision' AND signals.private=0 AND signals.status='active' "
-            f"AND signals.tags != '[]' {superseded_clause}",
-            superseded_params,
-        ).fetchone()[0]
-
-        if distinct_tags >= 3:
-            # Tag-grouped decisions
-            rows = conn.execute(
-                f"SELECT COALESCE(json_extract(s.tags, '$[0]'), '') as primary_tag, "
-                f"GROUP_CONCAT('- [' || s.date || '] ' || s.title || "
-                f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
-                f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END"
-                f", CHAR(10)) "
-                f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
-                f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
-                f"GROUP BY primary_tag ORDER BY MAX(s.date) DESC LIMIT 15",
-                superseded_params,
-            ).fetchall()
-
-            if rows:
-                brief += "\n\n## Recent Decisions"
-                for tag, entries in rows:
-                    if not entries:
-                        continue
-                    if tag and tag != "[]":
-                        brief += f"\n### {tag}\n{entries}"
-                    else:
-                        brief += f"\n{entries}"
-        else:
-            # Chronological decisions
-            rows = conn.execute(
-                f"SELECT '- [' || s.date || '] ' || s.title || "
-                f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
-                f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END "
-                f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
-                f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
-                f"ORDER BY s.date DESC LIMIT 15",
-                superseded_params,
-            ).fetchall()
-
-            if rows:
-                decisions_text = "\n".join(row[0] for row in rows)
-                brief += f"\n\n## Recent Decisions\n{decisions_text}"
-
-        # Footer
-        private_count = conn.execute(
-            "SELECT COUNT(*) FROM signals WHERE private=1"
-        ).fetchone()[0]
-
-        footer_parts: list[str] = []
-        if private_count > 0:
-            footer_parts.append(f"{private_count} private signal(s)")
-        if superseded_count > 0:
-            footer_parts.append(f"{superseded_count} superseded signal(s)")
-        if withdrawn_count > 0:
-            footer_parts.append(f"{withdrawn_count} withdrawn signal(s)")
-        if invalid_count > 0:
-            footer_parts.append(f"{invalid_count} signal(s) incomplete (missing rationale)")
-
-        if footer_parts:
-            brief += f"\n\n*+ {', '.join(footer_parts)} not shown*"
-    finally:
-        conn.close()
-
-    # Cap brief size
-    max_lines = int(os.environ.get("ENGRAM_BRIEF_MAX_LINES", "50"))
-    lines = brief.split("\n")
-    if len(lines) > max_lines:
-        brief = "\n".join(lines[:max_lines])
-        brief += f"\n\n*... truncated to {max_lines} lines. Use @engram:query for full details.*"
-
-    (d / "brief.md").write_text(brief + "\n")
-
-
 # ── Path to keywords ────────────────────────────────────────────────
 
 def engram_path_to_keywords(filepath: str) -> str:
@@ -853,224 +336,648 @@ def engram_path_to_keywords(filepath: str) -> str:
     return " ".join(result)
 
 
-# ── Query relevant signals ──────────────────────────────────────────
+# ── EngramStore ──────────────────────────────────────────────────────
 
-def engram_query_relevant(dir_path: StrPath, search_terms: str, limit: int = 3) -> str:
-    """Search for signals matching keywords. Returns formatted string."""
-    if not search_terms:
-        return ""
+class EngramStore:
+    """Manages an .engram directory — init, reindex, query, brief."""
 
-    db_path = Path(dir_path) / "index.db"
-    if not db_path.is_file():
-        return ""
+    def __init__(self, dir_path: StrPath):
+        self.root = Path(dir_path)
+        self.db_path = self.root / "index.db"
+        self.decisions_dir = self.root / "decisions"
+        self.private_dir = self.root / "_private" / "decisions"
 
-    # Build OR-joined FTS5 query
-    terms = search_terms.split()
-    if not terms:
-        return ""
-    fts_query = " OR ".join(terms)
-
-    conn = sqlite3.connect(str(db_path))
-    try:
+    @property
+    def git_tracking(self) -> bool:
+        """Check if git tracking is explicitly enabled via config."""
+        config = self.root / "config"
+        if not config.is_file():
+            return False
         try:
-            rows = conn.execute(
-                "SELECT s.date, s.title, s.excerpt "
-                "FROM signals_fts fts JOIN signals s ON s.id = fts.rowid "
-                "WHERE signals_fts MATCH ? AND s.private = 0 AND s.status = 'active' "
-                "AND s.slug NOT IN (SELECT target_file FROM links WHERE rel_type = 'supersedes') "
-                "ORDER BY rank LIMIT ?",
-                (fts_query, limit),
-            ).fetchall()
+            return "git_tracking=true" in config.read_text().splitlines()
+        except OSError:
+            return False
+
+    @contextlib.contextmanager
+    def connect(self):
+        """Context manager for SQLite connections to index.db."""
+        with _connect(self.db_path) as conn:
+            yield conn
+
+    def meta_get(self, key: str) -> str | None:
+        """Read a value from the meta table."""
+        if not self.db_path.is_file():
+            return None
+        try:
+            with self.connect() as conn:
+                row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+                return row[0] if row else None
         except sqlite3.Error:
-            rows = []
-    finally:
-        conn.close()
+            return None
 
-    if not rows:
-        return ""
+    def meta_set(self, key: str, value: str) -> None:
+        """Write a value to the meta table."""
+        try:
+            with self.connect() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                    (key, value),
+                )
+                conn.commit()
+        except sqlite3.Error:
+            pass
 
-    lines = []
-    for row_date, title, excerpt in rows:
-        if not title:
-            continue
-        if excerpt:
-            lines.append(f"- [{row_date}] {title} — {excerpt}")
+    def init(self) -> bool:
+        """Initialize .engram directory structure and index.db."""
+        if not _check_fts5():
+            return False
+        self.decisions_dir.mkdir(parents=True, exist_ok=True)
+        self.private_dir.mkdir(parents=True, exist_ok=True)
+
+        # Only manage .gitignore when git tracking is enabled
+        if self.git_tracking:
+            gi = self.root / ".gitignore"
+            if not gi.is_file():
+                gi.write_text("index.db\nbrief.md\n_private/\nconfig\n")
+            else:
+                existing = gi.read_text()
+                lines = existing.splitlines()
+                for entry in ("_private/", "brief.md", "config"):
+                    if entry not in lines:
+                        existing += entry + "\n"
+                gi.write_text(existing)
+
+        if not self.db_path.is_file():
+            with self.connect() as conn:
+                conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
+        return True
+
+    def _index_file(self, filepath: StrPath, private: int = 0) -> None:
+        """Parse a signal markdown file and insert into index.db."""
+        sig = Signal.from_file(filepath)
+
+        if not sig.date:
+            sig.date = date.today().isoformat()
+        if not sig.title:
+            sig.title = Path(filepath).stem
+
+        slug = _slug(filepath)
+
+        # Normalize status
+        if sig.status not in ("active", "withdrawn"):
+            sig.status = "active"
+
+        # Validate — invalid overrides frontmatter status
+        ok, _ = sig.validate()
+        if not ok:
+            sig.status = "invalid"
+            print(f"engram: warning: {Path(filepath).name} is incomplete (missing rationale)", file=sys.stderr)
+
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (sig.sig_type, sig.title, sig.content, sig.tags, sig.source, sig.date,
+                 str(filepath), private, sig.excerpt, slug, sig.status),
+            )
+
+            # Insert supersedes link
+            if sig.supersedes:
+                conn.execute(
+                    "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, 'supersedes')",
+                    (slug, sig.supersedes),
+                )
+
+            # Insert other links
+            if sig.links:
+                for rel, target in sig.parsed_links():
+                    conn.execute(
+                        "INSERT OR IGNORE INTO links (source_file, target_file, rel_type) VALUES (?, ?, ?)",
+                        (slug, target, rel),
+                    )
+
+            conn.commit()
+
+    def reindex(self) -> None:
+        """Destructive rebuild of index.db from signal files. Preserves meta table."""
+        # Preserve meta table data
+        meta_backup: list[tuple[str, str]] = []
+        if self.db_path.is_file():
+            try:
+                with self.connect() as conn:
+                    meta_backup = conn.execute("SELECT key, value FROM meta").fetchall()
+            except sqlite3.Error:
+                pass
+
+        # Recreate index from scratch
+        if self.db_path.is_file():
+            self.db_path.unlink()
+        with self.connect() as conn:
+            conn.executescript(ENGRAM_SCHEMA_FILE.read_text())
+
+            # Restore meta data
+            for key, value in meta_backup:
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+            conn.commit()
+
+        # Index public signals
+        if self.decisions_dir.is_dir():
+            for f in sorted(self.decisions_dir.glob("*.md")):
+                self._index_file(str(f), private=0)
+
+        # Index private signals
+        if self.private_dir.is_dir():
+            for f in sorted(self.private_dir.glob("*.md")):
+                self._index_file(str(f), private=1)
+
+    def ingest_commits(self) -> None:
+        """Ingest decision-worthy commits as signal files."""
+        if not self.git_tracking:
+            return
+
+        # Must be in a git repo
+        try:
+            subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                           capture_output=True, check=True)
+        except (OSError, subprocess.CalledProcessError):
+            return
+
+        last_commit = self.meta_get("last_commit") or ""
+
+        # Get log output
+        if not last_commit:
+            cmd = ["git", "log", "-50", "--format=%H|%s|%ai"]
         else:
-            lines.append(f"- [{row_date}] {title}")
+            cmd = ["git", "log", f"{last_commit}..HEAD", "--format=%H|%s|%ai"]
 
-    return "\n".join(lines)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+            log_output = result.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return
 
+        if not log_output:
+            return
 
-# ── Tag summary ─────────────────────────────────────────────────────
+        new_head = ""
 
-def engram_tag_summary(dir_path: StrPath) -> str:
-    """Return top topics summary string."""
-    db_path = Path(dir_path) / "index.db"
-    if not db_path.is_file():
-        return ""
+        # Pre-build set of existing source tags for O(1) dedup lookups
+        existing_sources: set[str] = set()
+        for search_dir in (self.decisions_dir, self.private_dir):
+            if search_dir.is_dir():
+                for f in search_dir.glob("*.md"):
+                    content = f.read_text(errors="replace")
+                    for cl in content.splitlines():
+                        if cl.startswith("source:"):
+                            existing_sources.add(cl.strip())
+                            break
 
-    conn = sqlite3.connect(str(db_path))
-    try:
-        total = conn.execute(
-            "SELECT COUNT(*) FROM signals WHERE private=0"
-        ).fetchone()[0]
-        if total < 5:
+        for line in log_output.splitlines():
+            parts = line.split("|", 2)
+            if len(parts) < 3:
+                continue
+            commit_hash, subject, date_str = parts
+
+            if not new_head:
+                new_head = commit_hash
+
+            if not _is_decision_commit(subject, commit_hash):
+                continue
+
+            # Dedup: skip if file with this source already exists
+            if f"source: git:{commit_hash}" in existing_sources:
+                continue
+
+            commit_date = date_str.split()[0] if date_str else date.today().isoformat()
+            slug = _slugify(subject)
+            if not slug:
+                slug = f"commit-{commit_hash[:7]}"
+
+            filepath = self.decisions_dir / f"{slug}.md"
+
+            # Manual signal with same slug already exists — defer to it
+            if filepath.is_file():
+                continue
+            if (self.private_dir / f"{slug}.md").is_file():
+                continue
+
+            # Get diff stat
+            try:
+                stat_result = subprocess.run(
+                    ["git", "show", "--stat", "--format=", commit_hash],
+                    capture_output=True, text=True, errors="replace",
+                )
+                stat = stat_result.stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                stat = ""
+
+            # Extract commit body, strip Co-Authored-By trailers
+            try:
+                body_result = subprocess.run(
+                    ["git", "log", "-1", "--format=%b", commit_hash],
+                    capture_output=True, text=True, errors="replace",
+                )
+                body = body_result.stdout
+                # Strip Co-Authored-By lines
+                body = "\n".join(
+                    line for line in body.splitlines()
+                    if not line.lower().startswith("co-authored-by:")
+                ).strip()
+            except (OSError, subprocess.SubprocessError):
+                body = ""
+
+            # Build signal content
+            signal = f"---\ntype: decision\ndate: {commit_date}\nsource: git:{commit_hash}\n---\n\n# {subject}\n\n"
+            if body:
+                signal += f"{body}\n\n{stat}\n"
+            else:
+                signal += f"{stat}\n"
+
+            filepath.write_text(signal)
+
+        # Update last_commit pointer
+        if new_head:
+            self.meta_set("last_commit", new_head)
+
+    def ingest_plans(self) -> None:
+        """Ingest Claude Code plan files as decision signals."""
+        # Resolve project-scoped plans directory
+        plans_dir = os.environ.get("ENGRAM_PLANS_DIR", "")
+        if not plans_dir:
+            project_key = os.getcwd().replace("/", "-")
+            plans_dir = os.path.expanduser(f"~/.claude/projects/{project_key}/plans")
+
+        plans_path = Path(plans_dir)
+
+        # Safety: never ingest from the global plans directory
+        global_plans = Path.home() / ".claude" / "plans"
+        try:
+            if global_plans.exists() and plans_path.exists():
+                if plans_path.resolve() == global_plans.resolve():
+                    return
+        except OSError:
+            pass
+
+        if not plans_path.is_dir():
+            return
+
+        # Check last ingest timestamp
+        last_ingest = self.meta_get("last_plan_ingest") or ""
+
+        # Find plan files
+        plan_files = list(plans_path.glob("*.md"))
+        if last_ingest and self.db_path.is_file():
+            db_mtime = self.db_path.stat().st_mtime
+            plan_files = [f for f in plan_files if f.stat().st_mtime > db_mtime]
+
+        if not plan_files:
+            return
+
+        today = date.today().isoformat()
+
+        for plan_file in plan_files:
+            basename = plan_file.stem
+
+            # Dedup: skip if file with this source already exists
+            source_tag = f"source: plan:{basename}"
+            found = False
+            if self.decisions_dir.is_dir():
+                for f in self.decisions_dir.glob("*.md"):
+                    if source_tag in f.read_text(errors="replace"):
+                        found = True
+                        break
+            if found:
+                continue
+
+            # Extract title and context
+            text = plan_file.read_text(errors="replace")
+            title = ""
+            for line in text.splitlines():
+                if line.startswith("# "):
+                    title = line[2:]
+                    break
+            if not title:
+                title = basename
+
+            # Extract context section
+            context_lines = []
+            in_context = False
+            for line in text.splitlines():
+                if line.startswith("## Context"):
+                    in_context = True
+                    continue
+                if in_context and line.startswith("## "):
+                    break
+                if in_context:
+                    context_lines.append(line)
+            context = "\n".join(context_lines).strip()
+
+            if not context:
+                continue
+
+            slug = _slugify(title)
+            if not slug:
+                slug = f"plan-{basename}"
+
+            filepath = self.decisions_dir / f"plan-{slug}.md"
+            signal = f"---\ntype: decision\ndate: {today}\nsource: plan:{basename}\n---\n\n# {title}\n\n{context}\n"
+            filepath.write_text(signal)
+
+        # Update last_plan_ingest timestamp
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.meta_set("last_plan_ingest", now)
+
+    def brief(self) -> None:
+        """Generate brief.md summary of decisions."""
+        if not self.db_path.is_file():
+            return
+
+        with self.connect() as conn:
+            # Build superseded set
+            superseded_slugs = [
+                row[0] for row in
+                conn.execute("SELECT target_file FROM links WHERE rel_type='supersedes'").fetchall()
+            ]
+
+            superseded_count = len(superseded_slugs)
+
+            # Build SQL exclusion for superseded slugs
+            superseded_clause = ""
+            superseded_params: list[str] = []
+            if superseded_slugs:
+                placeholders = ",".join("?" * len(superseded_slugs))
+                superseded_clause = f"AND slug NOT IN ({placeholders})"
+                superseded_params = superseded_slugs
+
+            # Counts
+            decision_count = conn.execute(
+                "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='active'"
+            ).fetchone()[0]
+
+            invalid_count = conn.execute(
+                "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='invalid'"
+            ).fetchone()[0]
+
+            withdrawn_count = conn.execute(
+                "SELECT COUNT(*) FROM signals WHERE type='decision' AND private=0 AND status='withdrawn'"
+            ).fetchone()[0]
+
+            brief = f"# Decision Context ({decision_count} decisions)"
+
+            # Check distinct tag count
+            distinct_tags = conn.execute(
+                f"SELECT COUNT(DISTINCT j.value) FROM signals, json_each(signals.tags) j "
+                f"WHERE signals.type='decision' AND signals.private=0 AND signals.status='active' "
+                f"AND signals.tags != '[]' {superseded_clause}",
+                superseded_params,
+            ).fetchone()[0]
+
+            if distinct_tags >= 3:
+                # Tag-grouped decisions
+                rows = conn.execute(
+                    f"SELECT COALESCE(json_extract(s.tags, '$[0]'), '') as primary_tag, "
+                    f"GROUP_CONCAT('- [' || s.date || '] ' || s.title || "
+                    f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
+                    f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END"
+                    f", CHAR(10)) "
+                    f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
+                    f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
+                    f"GROUP BY primary_tag ORDER BY MAX(s.date) DESC LIMIT 15",
+                    superseded_params,
+                ).fetchall()
+
+                if rows:
+                    brief += "\n\n## Recent Decisions"
+                    for tag, entries in rows:
+                        if not entries:
+                            continue
+                        if tag and tag != "[]":
+                            brief += f"\n### {tag}\n{entries}"
+                        else:
+                            brief += f"\n{entries}"
+            else:
+                # Chronological decisions
+                rows = conn.execute(
+                    f"SELECT '- [' || s.date || '] ' || s.title || "
+                    f"CASE WHEN s.excerpt != '' THEN ' — ' || s.excerpt ELSE '' END || "
+                    f"CASE WHEN l.target_file IS NOT NULL THEN ' (supersedes: ' || l.target_file || ')' ELSE '' END "
+                    f"FROM signals s LEFT JOIN links l ON l.source_file = s.slug AND l.rel_type = 'supersedes' "
+                    f"WHERE s.type='decision' AND s.private=0 AND s.status='active' {superseded_clause} "
+                    f"ORDER BY s.date DESC LIMIT 15",
+                    superseded_params,
+                ).fetchall()
+
+                if rows:
+                    decisions_text = "\n".join(row[0] for row in rows)
+                    brief += f"\n\n## Recent Decisions\n{decisions_text}"
+
+            # Footer
+            private_count = conn.execute(
+                "SELECT COUNT(*) FROM signals WHERE private=1"
+            ).fetchone()[0]
+
+            footer_parts: list[str] = []
+            if private_count > 0:
+                footer_parts.append(f"{private_count} private signal(s)")
+            if superseded_count > 0:
+                footer_parts.append(f"{superseded_count} superseded signal(s)")
+            if withdrawn_count > 0:
+                footer_parts.append(f"{withdrawn_count} withdrawn signal(s)")
+            if invalid_count > 0:
+                footer_parts.append(f"{invalid_count} signal(s) incomplete (missing rationale)")
+
+            if footer_parts:
+                brief += f"\n\n*+ {', '.join(footer_parts)} not shown*"
+
+        # Cap brief size
+        max_lines = int(os.environ.get("ENGRAM_BRIEF_MAX_LINES", "50"))
+        lines = brief.split("\n")
+        if len(lines) > max_lines:
+            brief = "\n".join(lines[:max_lines])
+            brief += f"\n\n*... truncated to {max_lines} lines. Use @engram:query for full details.*"
+
+        (self.root / "brief.md").write_text(brief + "\n")
+
+    def resync(self) -> None:
+        """Full sync: ingest commits, ingest plans, reindex, generate brief."""
+        self.ingest_commits()
+        self.ingest_plans()
+        self.reindex()
+        self.brief()
+
+    def query_relevant(self, search_terms: str, limit: int = 3) -> str:
+        """Search for signals matching keywords. Returns formatted string."""
+        if not search_terms:
             return ""
 
-        rows = conn.execute(
-            "SELECT j.value AS tag, COUNT(*) AS cnt "
-            "FROM signals, json_each(signals.tags) j "
-            "WHERE signals.private = 0 AND signals.tags != '[]' "
-            "GROUP BY j.value ORDER BY cnt DESC LIMIT 8"
-        ).fetchall()
-    finally:
-        conn.close()
+        if not self.db_path.is_file():
+            return ""
 
-    if not rows:
-        return ""
+        # Build OR-joined FTS5 query
+        terms = search_terms.split()
+        if not terms:
+            return ""
+        fts_query = " OR ".join(terms)
 
-    parts = [f"{tag} ({cnt})" for tag, cnt in rows if tag]
-    if not parts:
-        return ""
+        with self.connect() as conn:
+            try:
+                rows = conn.execute(
+                    "SELECT s.date, s.title, s.excerpt "
+                    "FROM signals_fts fts JOIN signals s ON s.id = fts.rowid "
+                    "WHERE signals_fts MATCH ? AND s.private = 0 AND s.status = 'active' "
+                    "AND s.slug NOT IN (SELECT target_file FROM links WHERE rel_type = 'supersedes') "
+                    "ORDER BY rank LIMIT ?",
+                    (fts_query, limit),
+                ).fetchall()
+            except sqlite3.Error:
+                rows = []
 
-    return "Top topics: " + ", ".join(parts)
+        if not rows:
+            return ""
 
+        lines = []
+        for row_date, title, excerpt in rows:
+            if not title:
+                continue
+            if excerpt:
+                lines.append(f"- [{row_date}] {title} — {excerpt}")
+            else:
+                lines.append(f"- [{row_date}] {title}")
 
-# ── Find incomplete signals ─────────────────────────────────────────
+        return "\n".join(lines)
 
-def engram_find_incomplete(dir_path: StrPath, limit: int = 5) -> str:
-    """Find signals with gaps. Returns pipe-delimited lines."""
-    db_path = Path(dir_path) / "index.db"
-    if not db_path.is_file():
-        return ""
+    def tag_summary(self) -> str:
+        """Return top topics summary string."""
+        if not self.db_path.is_file():
+            return ""
 
-    conn = sqlite3.connect(str(db_path))
-    try:
-        rows = conn.execute(
-            "SELECT s.slug, s.title, "
-            "CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END "
-            "|| CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
-            "|| CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END "
-            "AS gap_types "
-            "FROM signals s "
-            "LEFT JOIN links l ON l.source_file = s.slug "
-            "LEFT JOIN links l2 ON l2.target_file = s.slug "
-            "WHERE (s.tags = '[]' OR s.tags = '' "
-            "OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%') "
-            "OR (l.source_file IS NULL AND l2.target_file IS NULL)) "
-            "GROUP BY s.slug "
-            "ORDER BY s.date DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
-    finally:
-        conn.close()
+        with self.connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM signals WHERE private=0"
+            ).fetchone()[0]
+            if total < 5:
+                return ""
 
-    if not rows:
-        return ""
+            rows = conn.execute(
+                "SELECT j.value AS tag, COUNT(*) AS cnt "
+                "FROM signals, json_each(signals.tags) j "
+                "WHERE signals.private = 0 AND signals.tags != '[]' "
+                "GROUP BY j.value ORDER BY cnt DESC LIMIT 8"
+            ).fetchall()
 
-    lines = []
-    for slug, title, gaps in rows:
-        gaps = gaps.rstrip(",")
-        lines.append(f"{slug}|{title}|{gaps}")
+        if not rows:
+            return ""
 
-    return "\n".join(lines)
+        parts = [f"{tag} ({cnt})" for tag, cnt in rows if tag]
+        if not parts:
+            return ""
 
+        return "Top topics: " + ", ".join(parts)
 
-# ── Resync pipeline ─────────────────────────────────────────────────
+    def find_incomplete(self, limit: int = 5) -> str:
+        """Find signals with gaps. Returns pipe-delimited lines."""
+        if not self.db_path.is_file():
+            return ""
 
-def engram_resync(dir_path: StrPath) -> None:
-    """Full sync: ingest commits, ingest plans, reindex, generate brief."""
-    engram_ingest_commits(dir_path)
-    engram_ingest_plans(dir_path)
-    engram_reindex(dir_path)
-    engram_brief(dir_path)
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT s.slug, s.title, "
+                "CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END "
+                "|| CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
+                "|| CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END "
+                "AS gap_types "
+                "FROM signals s "
+                "LEFT JOIN links l ON l.source_file = s.slug "
+                "LEFT JOIN links l2 ON l2.target_file = s.slug "
+                "WHERE (s.tags = '[]' OR s.tags = '' "
+                "OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%') "
+                "OR (l.source_file IS NULL AND l2.target_file IS NULL)) "
+                "GROUP BY s.slug "
+                "ORDER BY s.date DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
 
+        if not rows:
+            return ""
 
-# ── Uncommitted signal summary ──────────────────────────────────────
+        lines = []
+        for slug, title, gaps in rows:
+            gaps = gaps.rstrip(",")
+            lines.append(f"{slug}|{title}|{gaps}")
 
-def engram_uncommitted_summary(dir_path: StrPath) -> str:
-    """Report uncommitted signals if git tracking is enabled."""
-    if not _git_tracking_enabled(dir_path):
-        return ""
+        return "\n".join(lines)
 
-    try:
-        subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                       capture_output=True, check=True)
-    except (OSError, subprocess.CalledProcessError):
-        return ""
+    def uncommitted_summary(self) -> str:
+        """Report uncommitted signals if git tracking is enabled."""
+        if not self.git_tracking:
+            return ""
 
-    d = Path(dir_path)
-    try:
-        result = subprocess.run(
-            ["git", "status", "--porcelain", str(d / "decisions"), str(d / "_private" / "decisions")],
-            capture_output=True, text=True, errors="replace",
-        )
-        lines = [l for l in result.stdout.splitlines() if l.strip()]
-    except (OSError, subprocess.SubprocessError):
-        return ""
+        try:
+            subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                           capture_output=True, check=True)
+        except (OSError, subprocess.CalledProcessError):
+            return ""
 
-    if not lines:
-        return ""
+        try:
+            result = subprocess.run(
+                ["git", "status", "--porcelain", str(self.decisions_dir), str(self.private_dir)],
+                capture_output=True, text=True, errors="replace",
+            )
+            lines = [l for l in result.stdout.splitlines() if l.strip()]
+        except (OSError, subprocess.SubprocessError):
+            return ""
 
-    return f"{len(lines)} uncommitted signal(s) in .engram/"
+        if not lines:
+            return ""
+
+        return f"{len(lines)} uncommitted signal(s) in .engram/"
 
 
 # ── Validate content from stdin ──────────────────────────────────────
 
 def _validate_content_stdin() -> str:
     """Validate signal content read from stdin. For pre-tool-use hook."""
-    decoded = sys.stdin.read()
+    text = sys.stdin.read()
     errors = []
 
-    lines = decoded.splitlines()
+    fm_lines, content_lines = _split_frontmatter(text)
 
-    # Check frontmatter delimiters
-    delimiter_count = sum(1 for l in lines if l == "---")
-    if not lines or lines[0] != "---":
+    if not fm_lines and text.splitlines()[:1] != ["---"]:
         errors.append("missing opening --- frontmatter delimiter")
-    if delimiter_count < 2:
+        errors.append("missing closing --- frontmatter delimiter")
+    elif not fm_lines:
         errors.append("missing closing --- frontmatter delimiter")
 
     # Check date field
-    has_date = any(re.match(r"^date: *\d{4}-\d{2}-\d{2}", l) for l in lines)
+    has_date = any(
+        re.match(r"^ *\d{4}-\d{2}-\d{2}", line.partition(":")[2])
+        for line in fm_lines if line.startswith("date:")
+    )
     if not has_date:
         errors.append("missing or invalid date: field (need YYYY-MM-DD)")
 
     # Check tags field
-    tags_line = ""
-    for l in lines:
-        if l.startswith("tags:"):
-            tags_line = l
-            break
+    tags_line = next((l for l in fm_lines if l.startswith("tags:")), None)
     if not tags_line:
         errors.append("missing tags: field")
     elif "[]" in tags_line:
         errors.append("tags: is empty, add at least one tag")
 
-    # Check H1 title
-    has_title = any(l.startswith("# ") for l in lines)
-    if not has_title:
-        errors.append("missing H1 title (# ...)")
-
-    # Check lead paragraph
-    found_title = False
+    # Check H1 title and lead paragraph
+    has_title = False
     lead = ""
-    fm_count = 0
-    for l in lines:
-        if l == "---":
-            fm_count += 1
+    for line in content_lines:
+        if not has_title and line.startswith("# "):
+            has_title = True
             continue
-        if fm_count < 2:
-            continue
-        if l.startswith("# "):
-            found_title = True
-            continue
-        if found_title:
-            if not l or l.startswith("#"):
+        if has_title:
+            if not line or line.startswith("#"):
                 continue
-            lead = l
+            lead = line
             break
 
+    if not has_title:
+        errors.append("missing H1 title (# ...)")
     if not lead or len(lead) < 20:
         errors.append("lead paragraph after title must exist and be >= 20 chars (explains why)")
 
@@ -1081,77 +988,77 @@ def _validate_content_stdin() -> str:
 
 # ── CLI dispatch ────────────────────────────────────────────────────
 
+def _arg(n: int, default: str = ".engram") -> str:
+    """Get sys.argv[n] or default."""
+    return sys.argv[n] if len(sys.argv) > n else default
+
+
+def _cmd_init() -> None:
+    sys.exit(0 if EngramStore(_arg(2)).init() else 1)
+
+
+def _cmd_query() -> None:
+    result = EngramStore(_arg(2)).query_relevant(_arg(3, ""), int(_arg(4, "3")))
+    if result:
+        print(result)
+
+
+def _cmd_tag_summary() -> None:
+    result = EngramStore(_arg(2)).tag_summary()
+    if result:
+        print(result, end="")
+
+
+def _cmd_find_incomplete() -> None:
+    result = EngramStore(_arg(2)).find_incomplete(int(_arg(3, "5")))
+    if result:
+        print(result)
+
+
+def _cmd_path_to_keywords() -> None:
+    result = engram_path_to_keywords(_arg(2, ""))
+    if result:
+        print(result, end="")
+
+
+def _cmd_uncommitted_summary() -> None:
+    result = EngramStore(_arg(2)).uncommitted_summary()
+    if result:
+        print(result)
+
+
+def _cmd_validate_content() -> None:
+    errors = _validate_content_stdin()
+    if errors:
+        print(errors, file=sys.stderr)
+        sys.exit(1)
+
+
+_COMMANDS: dict[str, callable] = {
+    "init": _cmd_init,
+    "resync": lambda: EngramStore(_arg(2)).resync(),
+    "reindex": lambda: EngramStore(_arg(2)).reindex(),
+    "brief": lambda: EngramStore(_arg(2)).brief(),
+    "query": _cmd_query,
+    "tag-summary": _cmd_tag_summary,
+    "find-incomplete": _cmd_find_incomplete,
+    "path-to-keywords": _cmd_path_to_keywords,
+    "uncommitted-summary": _cmd_uncommitted_summary,
+    "validate-content": _cmd_validate_content,
+    "ingest-commits": lambda: EngramStore(_arg(2)).ingest_commits(),
+    "ingest-plans": lambda: EngramStore(_arg(2)).ingest_plans(),
+}
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python3 engram.py <command> [args...]", file=sys.stderr)
         sys.exit(1)
 
     cmd = sys.argv[1]
-
-    if cmd == "init":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        ok = engram_init(dir_path)
-        sys.exit(0 if ok else 1)
-
-    elif cmd == "resync":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        engram_resync(dir_path)
-
-    elif cmd == "reindex":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        engram_reindex(dir_path)
-
-    elif cmd == "brief":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        engram_brief(dir_path)
-
-    elif cmd == "query":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        keywords = sys.argv[3] if len(sys.argv) > 3 else ""
-        limit = int(sys.argv[4]) if len(sys.argv) > 4 else 3
-        result = engram_query_relevant(dir_path, keywords, limit)
-        if result:
-            print(result)
-
-    elif cmd == "tag-summary":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        result = engram_tag_summary(dir_path)
-        if result:
-            print(result, end="")
-
-    elif cmd == "find-incomplete":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 5
-        result = engram_find_incomplete(dir_path, limit)
-        if result:
-            print(result)
-
-    elif cmd == "path-to-keywords":
-        filepath = sys.argv[2] if len(sys.argv) > 2 else ""
-        result = engram_path_to_keywords(filepath)
-        if result:
-            print(result, end="")
-
-    elif cmd == "uncommitted-summary":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        result = engram_uncommitted_summary(dir_path)
-        if result:
-            print(result)
-
-    elif cmd == "validate-content":
-        errors = _validate_content_stdin()
-        if errors:
-            print(errors, file=sys.stderr)
-            sys.exit(1)
-
-    elif cmd == "ingest-commits":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        engram_ingest_commits(dir_path)
-
-    elif cmd == "ingest-plans":
-        dir_path = sys.argv[2] if len(sys.argv) > 2 else ".engram"
-        engram_ingest_plans(dir_path)
-
+    handler = _COMMANDS.get(cmd)
+    if handler:
+        handler()
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         sys.exit(1)

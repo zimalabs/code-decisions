@@ -167,7 +167,8 @@ def test_fts5_check():
 def test_init():
     print("test_init:")
     d = str(TEST_DIR / "test-init" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     assert_dir_exists("decisions dir", f"{d}/decisions")
     assert_dir_exists("_private dir", f"{d}/_private/decisions")
     assert_file_exists("index.db", f"{d}/index.db")
@@ -179,21 +180,22 @@ def test_init():
         _fail("no gitignore by default", "file exists")
 
     # Idempotent
-    engram.engram_init(d)
+    store.init()
     assert_file_exists("still has index.db", f"{d}/index.db")
 
 
 def test_init_private_dirs():
     print("test_init_private_dirs:")
     d = str(TEST_DIR / "test-init-private" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
     assert_dir_exists("_private dir", f"{d}/_private/decisions")
 
 
 def test_write_decision():
     print("test_write_decision:")
     d = str(TEST_DIR / "test-write-decision" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
         "---\ndate: 2026-03-14\ntags: [infrastructure, caching]\n---\n\n"
@@ -203,7 +205,7 @@ def test_write_decision():
         "## Trade-offs\nHigher memory usage than Memcached.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     result = _db_query(f"{d}/index.db", "SELECT type, title, date FROM signals WHERE type='decision'")
     result_str = str(result)
@@ -250,9 +252,10 @@ def test_ingest_commits():
     _create_test_repo_mixed(repo_dir)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     file_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("3 decisions from 7 commits", str(file_count), "3")
@@ -286,9 +289,10 @@ def test_ingest_commits_body():
     subprocess.run(["git", "commit", "-q", "-m", "refactor: extract API gateway"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     file_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("2 decisions created", str(file_count), "2")
@@ -321,13 +325,14 @@ def test_ingest_dedup():
     _create_test_repo_mixed(repo_dir)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
 
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
     first_count = len(list(Path(d, "decisions").glob("*.md")))
 
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
     second_count = len(list(Path(d, "decisions").glob("*.md")))
 
     assert_eq("no duplicates after second ingest", str(first_count), str(second_count))
@@ -349,7 +354,8 @@ def test_ingest_manual_signal_suppresses():
     subprocess.run(["git", "commit", "-q", "-m", "feat: add widget"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
 
     Path(d, "decisions", "feat-add-widget.md").write_text(
@@ -357,7 +363,7 @@ def test_ingest_manual_signal_suppresses():
         "# Add widget component\n\nWe chose a widget approach because it composes better than mixins.\n"
     )
 
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     file_count = len(list(Path(d, "decisions").glob("feat-add-widget*")))
     assert_eq("manual signal suppresses auto-ingest", str(file_count), "1")
@@ -383,7 +389,8 @@ def test_ingest_private_signal_suppresses():
     subprocess.run(["git", "commit", "-q", "-m", "feat: switch to redis for caching"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
 
     Path(d, "_private", "decisions", "feat-switch-to-redis-for-caching.md").write_text(
@@ -391,7 +398,7 @@ def test_ingest_private_signal_suppresses():
         "# Switch to Redis for caching\n\nPrivate: contains vendor pricing details.\n"
     )
 
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     public_count = len(list(Path(d, "decisions").glob("feat-switch-to-redis*")))
     assert_eq("private signal suppresses auto-ingest", str(public_count), "0")
@@ -413,9 +420,10 @@ def test_ingest_no_manual_still_creates():
     subprocess.run(["git", "commit", "-q", "-m", "feat: add API gateway"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     file_count = len(list(Path(d, "decisions").glob("feat-add-api-gateway*")))
     assert_eq("auto-ingest creates signal when no manual", str(file_count), "1")
@@ -444,9 +452,10 @@ def test_ingest_brownfield():
             subprocess.run(["git", "commit", "-q", "-m", f"fix: typo in file {i}"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     file_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("brownfield: only decisions from last 50", str(file_count), "40")
@@ -470,8 +479,9 @@ def test_ingest_plans():
         "## Implementation\nUse asymmetric keys for JWT signing...\n"
     )
 
-    engram.engram_init(d)
-    engram.engram_ingest_plans(d)
+    store = engram.EngramStore(d)
+    store.init()
+    store.ingest_plans()
 
     plan_files = sum(
         1 for f in Path(d, "decisions").glob("*.md")
@@ -490,7 +500,8 @@ def test_ingest_plans():
 def test_reindex():
     print("test_reindex:")
     d = str(TEST_DIR / "test-reindex" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "test-a.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Decision A\n\nContent A\n"
@@ -499,14 +510,14 @@ def test_reindex():
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Decision B\n\nContent B\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     count = _db_scalar(f"{d}/index.db", "SELECT COUNT(*) FROM signals")
     assert_eq("2 signals indexed", str(count), "2")
 
     # Delete and recreate
     Path(d, "index.db").unlink()
-    engram.engram_reindex(d)
+    store.reindex()
     count = _db_scalar(f"{d}/index.db", "SELECT COUNT(*) FROM signals")
     assert_eq("2 signals after reindex", str(count), "2")
 
@@ -514,15 +525,16 @@ def test_reindex():
 def test_brief():
     print("test_brief:")
     d = str(TEST_DIR / "test-brief" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "pick-redis.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure]\n---\n\n"
         "# Pick Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     assert_file_exists("brief.md created", f"{d}/brief.md")
     brief = Path(d, "brief.md").read_text()
@@ -534,7 +546,8 @@ def test_brief():
 def test_fts_search():
     print("test_fts_search:")
     d = str(TEST_DIR / "test-fts" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "postgresql.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
@@ -545,7 +558,7 @@ def test_fts_search():
         "# FTS5 needs sync triggers\n\nWithout triggers the index becomes stale.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     db = f"{d}/index.db"
     result = _db_query(db,
@@ -567,7 +580,8 @@ def test_fts_search():
 def test_frontmatter_parsing():
     print("test_frontmatter_parsing:")
     d = str(TEST_DIR / "test-frontmatter" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "no-frontmatter.md").write_text(
         "# Decision with no frontmatter\n\nJust a plain markdown file with a heading.\n"
@@ -581,7 +595,7 @@ def test_frontmatter_parsing():
         "# Full frontmatter\n\nHas everything.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     count = _db_scalar(f"{d}/index.db", "SELECT COUNT(*) FROM signals")
     assert_eq("all 3 files indexed", str(count), "3")
@@ -599,14 +613,15 @@ def test_meta_preserved():
     _create_test_repo(repo_dir, 3)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     last_commit = _db_scalar(f"{d}/index.db", "SELECT value FROM meta WHERE key='last_commit'")
     assert_not_contains("last_commit is not empty", "EMPTY", str(last_commit))
 
-    engram.engram_reindex(d)
+    store.reindex()
     after_reindex = _db_scalar(f"{d}/index.db", "SELECT value FROM meta WHERE key='last_commit'")
     assert_eq("meta preserved after reindex", after_reindex, last_commit)
 
@@ -628,9 +643,10 @@ def test_incremental_ingest():
         subprocess.run(["git", "commit", "-q", "-m", f"feat: add feature {i}"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     first_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("3 initial commits", str(first_count), "3")
@@ -643,7 +659,7 @@ def test_incremental_ingest():
     subprocess.run(["git", "add", "feat5.rb"], check=True)
     subprocess.run(["git", "commit", "-q", "-m", "refactor: extract shared module"], check=True)
 
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
     second_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("5 after incremental", str(second_count), "5")
 
@@ -653,13 +669,14 @@ def test_incremental_ingest():
 def test_file_column():
     print("test_file_column:")
     d = str(TEST_DIR / "test-file-col" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "test-file.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Test file column\n\nContent.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     file_val = _db_scalar(f"{d}/index.db", "SELECT file FROM signals LIMIT 1")
     assert_contains("file column has path", file_val, "decisions/test-file.md")
@@ -668,14 +685,15 @@ def test_file_column():
 def test_private_signal_indexed():
     print("test_private_signal_indexed:")
     d = str(TEST_DIR / "test-private-indexed" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "_private", "decisions", "secret-deal.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [crm, deals]\n---\n\n"
         "# Secret deal with Acme Corp\n\nConfidential terms discussion.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     private_val = _db_scalar(f"{d}/index.db",
         "SELECT private FROM signals WHERE title='Secret deal with Acme Corp'")
@@ -685,7 +703,8 @@ def test_private_signal_indexed():
 def test_brief_excludes_private():
     print("test_brief_excludes_private:")
     d = str(TEST_DIR / "test-brief-private" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "public-choice.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [architecture]\n---\n\n"
@@ -696,8 +715,8 @@ def test_brief_excludes_private():
         "# Private deal terms\n\nConfidential information about deal structure and terms.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     brief = Path(d, "brief.md").read_text()
     assert_contains("brief has public title", brief, "Public architecture choice")
@@ -708,14 +727,15 @@ def test_brief_excludes_private():
 def test_private_queryable():
     print("test_private_queryable:")
     d = str(TEST_DIR / "test-private-query" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "_private", "decisions", "competitor-intel.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [competitive]\n---\n\n"
         "# Competitor launched new product\n\nDetails about competitor's launch.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     result = _db_query(f"{d}/index.db",
         "SELECT s.title FROM signals_fts fts JOIN signals s ON s.id = fts.rowid "
@@ -726,14 +746,15 @@ def test_private_queryable():
 def test_public_signals_unchanged():
     print("test_public_signals_unchanged:")
     d = str(TEST_DIR / "test-public-unchanged" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "normal.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
         "# Normal public decision\n\nStandard decision content.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     private_val = _db_scalar(f"{d}/index.db",
         "SELECT private FROM signals WHERE title='Normal public decision'")
@@ -746,7 +767,8 @@ def test_uncommitted_summary():
     _create_test_repo(repo_dir, 1)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
 
     Path(d, "decisions", "test-uncommitted.md").write_text(
@@ -755,13 +777,13 @@ def test_uncommitted_summary():
     )
 
     os.chdir(repo_dir)
-    result = engram.engram_uncommitted_summary(d)
+    result = store.uncommitted_summary()
     assert_contains("reports uncommitted count", result, "1 uncommitted signal")
 
     subprocess.run(["git", "add", ".engram/"], check=True)
     subprocess.run(["git", "commit", "-q", "-m", "engram: add signal"], check=True)
 
-    result = engram.engram_uncommitted_summary(d)
+    result = store.uncommitted_summary()
     assert_eq("no output after commit", result, "")
 
     os.chdir(ORIG_CWD)
@@ -770,13 +792,14 @@ def test_uncommitted_summary():
 def test_uncommitted_summary_no_git():
     print("test_uncommitted_summary_no_git:")
     d = str(TEST_DIR / "test-uncommitted-nogit" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "no-git.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\n---\n\n# No git repo\n\nContent.\n"
     )
 
-    result = engram.engram_uncommitted_summary(d)
+    result = store.uncommitted_summary()
     assert_eq("no output outside git", result, "")
 
 
@@ -793,11 +816,12 @@ def test_session_end_output():
     subprocess.run(["git", "commit", "-q", "-m", "docs: add readme"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.ingest_commits()
+    store.reindex()
+    store.brief()
 
     # Add .gitkeep
     Path(d, "decisions", ".gitkeep").touch()
@@ -837,7 +861,8 @@ def test_session_end_output():
 def test_supersedes_frontmatter():
     print("test_supersedes_frontmatter:")
     d = str(TEST_DIR / "test-supersedes" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "old-auth.md").write_text(
         "---\ntype: decision\ndate: 2026-03-10\n---\n\n"
@@ -848,7 +873,7 @@ def test_supersedes_frontmatter():
         "# Use JWT authentication\n\nMobile clients need token-based auth.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     link_count = _db_scalar(f"{d}/index.db",
         "SELECT COUNT(*) FROM links WHERE source_file='new-auth' AND target_file='old-auth' AND rel_type='supersedes'")
@@ -858,14 +883,15 @@ def test_supersedes_frontmatter():
 def test_links_frontmatter():
     print("test_links_frontmatter:")
     d = str(TEST_DIR / "test-links-fm" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\nlinks: [related:fts5-perf, related:ci-timeout]\n---\n\n"
         "# Use Redis for caching\n\nAlready in our stack.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     related_count = _db_scalar(f"{d}/index.db",
         "SELECT COUNT(*) FROM links WHERE source_file='use-redis' AND target_file='fts5-perf' AND rel_type='related'")
@@ -879,7 +905,8 @@ def test_links_frontmatter():
 def test_excerpt_extraction():
     print("test_excerpt_extraction:")
     d = str(TEST_DIR / "test-excerpt" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "test-excerpt.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
@@ -887,7 +914,7 @@ def test_excerpt_extraction():
         "## Alternatives\nMySQL was considered.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     excerpt = _db_scalar(f"{d}/index.db", "SELECT excerpt FROM signals WHERE slug='test-excerpt'")
     assert_contains("excerpt has first body line", excerpt, "Better JSON support")
@@ -896,13 +923,14 @@ def test_excerpt_extraction():
 def test_slug_column():
     print("test_slug_column:")
     d = str(TEST_DIR / "test-slug" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n# Use Redis\n\nContent.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     slug_val = _db_scalar(f"{d}/index.db", "SELECT slug FROM signals LIMIT 1")
     assert_eq("slug is basename without .md", slug_val, "use-redis")
@@ -911,7 +939,8 @@ def test_slug_column():
 def test_brief_hides_superseded():
     print("test_brief_hides_superseded:")
     d = str(TEST_DIR / "test-brief-superseded" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "old-cache.md").write_text(
         "---\ntype: decision\ndate: 2026-03-10\ntags: [infrastructure]\n---\n\n"
@@ -922,8 +951,8 @@ def test_brief_hides_superseded():
         "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     brief = Path(d, "brief.md").read_text()
     assert_contains("brief shows new decision", brief, "Use Redis for caching")
@@ -934,7 +963,8 @@ def test_brief_hides_superseded():
 def test_brief_tag_grouping():
     print("test_brief_tag_grouping:")
     d = str(TEST_DIR / "test-brief-tags" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "redis.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure, caching]\n---\n\n"
@@ -949,8 +979,8 @@ def test_brief_tag_grouping():
         "# Use PostgreSQL\n\nBetter JSON support and window functions than MySQL.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     brief = Path(d, "brief.md").read_text()
     assert_contains("brief has tag headers", brief, "###")
@@ -959,7 +989,8 @@ def test_brief_tag_grouping():
 def test_brief_max_lines():
     print("test_brief_max_lines:")
     d = str(TEST_DIR / "test-brief-max-lines" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     for i in range(1, 21):
         Path(d, "decisions", f"bulk-{i}.md").write_text(
@@ -967,9 +998,9 @@ def test_brief_max_lines():
             f"# Bulk decision number {i}\n\nSome explanation for decision {i} with enough text to occupy space in the brief.\n"
         )
 
-    engram.engram_reindex(d)
+    store.reindex()
     os.environ["ENGRAM_BRIEF_MAX_LINES"] = "10"
-    engram.engram_brief(d)
+    store.brief()
     os.environ.pop("ENGRAM_BRIEF_MAX_LINES", None)
 
     brief = Path(d, "brief.md").read_text()
@@ -980,15 +1011,16 @@ def test_brief_max_lines():
 def test_brief_excerpts():
     print("test_brief_excerpts:")
     d = str(TEST_DIR / "test-brief-excerpts" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "test-exc.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure]\n---\n\n"
         "# Use Redis for caching\n\nAlready in our stack for session storage and pub/sub needs.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     brief = Path(d, "brief.md").read_text()
     assert_contains("brief has excerpt", brief, "Already in our stack")
@@ -997,7 +1029,8 @@ def test_brief_excerpts():
 def test_supersession_chain():
     print("test_supersession_chain:")
     d = str(TEST_DIR / "test-chain" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "auth-v1.md").write_text(
         "---\ntype: decision\ndate: 2026-03-01\n---\n\n# Auth v1: sessions\n\nCookie-based sessions.\n"
@@ -1009,7 +1042,7 @@ def test_supersession_chain():
         "---\ntype: decision\ndate: 2026-03-15\nsupersedes: auth-v2\n---\n\n# Auth v3: OAuth2\n\nDelegated authentication.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     chain = _db_query(f"{d}/index.db",
         "WITH RECURSIVE chain(stem, depth) AS ("
@@ -1025,7 +1058,8 @@ def test_supersession_chain():
 def test_links_bidirectional():
     print("test_links_bidirectional:")
     d = str(TEST_DIR / "test-links-bidi" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\nlinks: [related:redis-perf]\n---\n\n"
@@ -1036,7 +1070,7 @@ def test_links_bidirectional():
         "# Redis p99 latency is 2ms\n\nVery fast.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     from_target = _db_scalar(f"{d}/index.db",
         "SELECT source_file FROM links WHERE target_file='redis-perf'")
@@ -1088,7 +1122,8 @@ def test_path_to_keywords():
 def test_query_relevant():
     print("test_query_relevant:")
     d = str(TEST_DIR / "test-query-relevant" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "use-redis.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [infrastructure]\n---\n\n"
@@ -1103,19 +1138,19 @@ def test_query_relevant():
         "# Secret caching strategy\n\nPrivate info about caching that should not be visible in queries.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_query_relevant(d, "redis caching")
+    result = store.query_relevant("redis caching")
     assert_contains("finds redis decision", result, "Use Redis")
     assert_not_contains("excludes private", result, "Secret")
 
-    result = engram.engram_query_relevant(d, "nonexistent_xyz_12345")
+    result = store.query_relevant("nonexistent_xyz_12345")
     assert_eq("no results for nonexistent", result, "")
 
-    result = engram.engram_query_relevant(d, "")
+    result = store.query_relevant("")
     assert_eq("empty terms returns empty", result, "")
 
-    result = engram.engram_query_relevant(d, "auth redis caching", limit=1)
+    result = store.query_relevant("auth redis caching", limit=1)
     line_count = len([l for l in result.splitlines() if l.startswith("-")])
     if line_count <= 1:
         _pass("limit respected")
@@ -1126,7 +1161,8 @@ def test_query_relevant():
 def test_query_relevant_excludes_superseded():
     print("test_query_relevant_excludes_superseded:")
     d = str(TEST_DIR / "test-query-superseded" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "old-cache.md").write_text(
         "---\ntype: decision\ndate: 2026-03-10\ntags: [infrastructure]\n---\n\n"
@@ -1137,9 +1173,9 @@ def test_query_relevant_excludes_superseded():
         "# Use Redis for caching\n\nSupports pub/sub which we need for real-time notifications.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_query_relevant(d, "caching")
+    result = store.query_relevant("caching")
     assert_contains("shows current decision", result, "Use Redis")
     assert_not_contains("hides superseded", result, "Memcached")
 
@@ -1147,7 +1183,8 @@ def test_query_relevant_excludes_superseded():
 def test_tag_summary():
     print("test_tag_summary:")
     d = str(TEST_DIR / "test-tag-summary" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     for i in range(1, 4):
         Path(d, "decisions", f"arch-{i}.md").write_text(
@@ -1163,9 +1200,9 @@ def test_tag_summary():
         "---\ntype: decision\ndate: 2026-03-14\ntags: [ci]\n---\n\n# CI decision\n\nContent.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_tag_summary(d)
+    result = store.tag_summary()
     assert_contains("has architecture tag", result, "architecture")
     assert_contains("has count", result, "(3)")
     assert_contains("has Top topics prefix", result, "Top topics")
@@ -1174,7 +1211,8 @@ def test_tag_summary():
 def test_tag_summary_few_signals():
     print("test_tag_summary_few_signals:")
     d = str(TEST_DIR / "test-tag-few" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "a.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [foo]\n---\n\n# A\n\nContent.\n"
@@ -1183,23 +1221,24 @@ def test_tag_summary_few_signals():
         "---\ntype: decision\ndate: 2026-03-14\ntags: [bar]\n---\n\n# B\n\nContent.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_tag_summary(d)
+    result = store.tag_summary()
     assert_eq("empty when < 5 signals", result, "")
 
 
 def test_post_tool_context_output():
     print("test_post_tool_context_output:")
     d = str(TEST_DIR / "test-post-tool" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "auth-handler.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\n---\n\n"
         "# Use OAuth for auth handler\n\nToken-based authentication.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     hook_script = str(SCRIPT_DIR.parent / "hooks" / "post-tool-use.sh")
     test_cwd = str(TEST_DIR / "test-post-tool")
@@ -1250,15 +1289,16 @@ def test_post_tool_context_output():
 def test_pre_compact_output():
     print("test_pre_compact_output:")
     d = str(TEST_DIR / "test-pre-compact" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "compact-test.md").write_text(
         "---\ntype: decision\ndate: 2026-03-14\ntags: [testing]\n---\n\n"
         "# Compact test decision\n\nTesting pre-compact hook with valid signal to verify context injection.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-compact.sh")
     test_cwd = str(TEST_DIR / "test-pre-compact")
@@ -1283,7 +1323,7 @@ def test_pre_compact_output():
 def test_stop_hook_output():
     print("test_stop_hook_output:")
     d = str(TEST_DIR / "test-stop-hook" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     hook_script = str(SCRIPT_DIR.parent / "hooks" / "stop.sh")
     test_cwd = str(TEST_DIR / "test-stop-hook")
@@ -1400,13 +1440,14 @@ def test_pre_tool_use_validation():
 def test_notification_hook():
     print("test_notification_hook:")
     d = str(TEST_DIR / "test-notification" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "incomplete.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\n---\n\n# Incomplete\n\nShort.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     hook_script = str(SCRIPT_DIR.parent / "hooks" / "notification.sh")
     test_cwd = str(TEST_DIR / "test-notification")
@@ -1427,7 +1468,7 @@ def test_notification_hook():
         "# Complete decision\n\nThis decision has proper rationale and tags for validation.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
     output = subprocess.run(
         ["bash", hook_script],
         capture_output=True, text=True,
@@ -1518,7 +1559,7 @@ def test_hooks_json_structure():
 def test_validate_signal_valid():
     print("test_validate_signal_valid:")
     d = str(TEST_DIR / "test-validate-valid" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     Path(d, "decisions", "valid-test.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\ntags: [architecture, validation]\n---\n\n"
@@ -1527,56 +1568,57 @@ def test_validate_signal_valid():
         "## Alternatives\n- No validation — too many incomplete signals\n"
     )
 
-    ok, _ = engram._validate_signal(f"{d}/decisions/valid-test.md")
+    ok, _ = engram.Signal.from_file(f"{d}/decisions/valid-test.md").validate()
     assert_eq("valid signal passes", str(int(ok)), "1")
 
 
 def test_validate_signal_missing_why():
     print("test_validate_signal_missing_why:")
     d = str(TEST_DIR / "test-validate-no-why" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     Path(d, "decisions", "no-why.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\ntags: [test]\n---\n\n"
         "# Decision without explanation\n\n"
     )
 
-    ok, _ = engram._validate_signal(f"{d}/decisions/no-why.md")
+    ok, _ = engram.Signal.from_file(f"{d}/decisions/no-why.md").validate()
     assert_eq("missing lead paragraph fails", str(int(ok)), "0")
 
 
 def test_validate_signal_missing_tags():
     print("test_validate_signal_missing_tags:")
     d = str(TEST_DIR / "test-validate-no-tags" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     Path(d, "decisions", "no-tags.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\ntags: []\n---\n\n"
         "# Decision without tags\n\nThis decision has no tags which should fail validation checks.\n"
     )
 
-    ok, _ = engram._validate_signal(f"{d}/decisions/no-tags.md")
+    ok, _ = engram.Signal.from_file(f"{d}/decisions/no-tags.md").validate()
     assert_eq("empty tags fails", str(int(ok)), "0")
 
 
 def test_validate_signal_short_why():
     print("test_validate_signal_short_why:")
     d = str(TEST_DIR / "test-validate-short" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     Path(d, "decisions", "short-why.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\ntags: [test]\n---\n\n"
         "# Short explanation\n\nToo short.\n"
     )
 
-    ok, _ = engram._validate_signal(f"{d}/decisions/short-why.md")
+    ok, _ = engram.Signal.from_file(f"{d}/decisions/short-why.md").validate()
     assert_eq("short lead paragraph fails", str(int(ok)), "0")
 
 
 def test_reindex_marks_invalid():
     print("test_reindex_marks_invalid:")
     d = str(TEST_DIR / "test-reindex-valid" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "good.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\ntags: [validation]\n---\n\n"
@@ -1587,7 +1629,7 @@ def test_reindex_marks_invalid():
         "---\ntype: decision\ndate: 2026-03-16\n---\n\n# Bad decision\n\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     status_good = _db_scalar(f"{d}/index.db", "SELECT status FROM signals WHERE slug='good'")
     assert_eq("good signal is active", status_good, "active")
@@ -1599,7 +1641,8 @@ def test_reindex_marks_invalid():
 def test_brief_excludes_invalid():
     print("test_brief_excludes_invalid:")
     d = str(TEST_DIR / "test-brief-invalid" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "visible.md").write_text(
         "---\ntype: decision\ndate: 2026-03-16\ntags: [validation]\n---\n\n"
@@ -1610,8 +1653,8 @@ def test_brief_excludes_invalid():
         "---\ntype: decision\ndate: 2026-03-16\n---\n\n# Hidden from brief\n\nShort.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     brief = Path(d, "brief.md").read_text()
     assert_contains("brief shows valid signal", brief, "Visible decision")
@@ -1633,16 +1676,17 @@ def test_ingest_bodyless_commit_invalid():
     subprocess.run(["git", "commit", "-q", "-m", "feat: add feature without body"], check=True)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
     _enable_git_tracking(d)
-    engram.engram_ingest_commits(d)
-    engram.engram_reindex(d)
+    store.ingest_commits()
+    store.reindex()
 
     status_val = _db_scalar(f"{d}/index.db",
         "SELECT status FROM signals WHERE source LIKE 'git:%' LIMIT 1")
     assert_eq("bodyless commit is invalid", str(status_val), "invalid")
 
-    engram.engram_brief(d)
+    store.brief()
     brief = Path(d, "brief.md").read_text()
     assert_not_contains("brief excludes bodyless commit", brief, "add feature without body")
 
@@ -1658,14 +1702,15 @@ def test_resync():
     os.makedirs(empty_plans, exist_ok=True)
     os.environ["ENGRAM_PLANS_DIR"] = empty_plans
 
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "resync-test.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\ntags: [testing]\n---\n\n"
         "# Test resync pipeline\n\nVerify that engram_resync runs ingest, reindex, and brief in one call.\n"
     )
 
-    engram.engram_resync(d)
+    store.resync()
 
     assert_file_exists("index.db exists after resync", f"{d}/index.db")
 
@@ -1684,19 +1729,21 @@ def test_git_tracking_config():
     d = str(TEST_DIR / "test-git-config" / ".engram")
     os.makedirs(d, exist_ok=True)
 
-    if not engram._git_tracking_enabled(d):
+    store = engram.EngramStore(d)
+
+    if not store.git_tracking:
         _pass("disabled by default")
     else:
         _fail("disabled by default", "returned true")
 
     _enable_git_tracking(d)
-    if engram._git_tracking_enabled(d):
+    if store.git_tracking:
         _pass("enabled after config")
     else:
         _fail("enabled after config", "returned false")
 
     Path(d, "config").write_text("git_tracking=false\n")
-    if not engram._git_tracking_enabled(d):
+    if not store.git_tracking:
         _pass("false value not enabled")
     else:
         _fail("false value not enabled", "returned true")
@@ -1705,7 +1752,7 @@ def test_git_tracking_config():
 def test_init_no_gitignore_by_default():
     print("test_init_no_gitignore_by_default:")
     d = str(TEST_DIR / "test-no-gitignore" / ".engram")
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     if not Path(d, ".gitignore").is_file():
         _pass("no gitignore created")
@@ -1724,7 +1771,7 @@ def test_init_gitignore_with_git_tracking():
     os.makedirs(d, exist_ok=True)
 
     _enable_git_tracking(d)
-    engram.engram_init(d)
+    engram.EngramStore(d).init()
 
     assert_file_exists("gitignore created", f"{d}/.gitignore")
     gitignore = Path(d, ".gitignore").read_text()
@@ -1740,10 +1787,11 @@ def test_ingest_noop_without_git_tracking():
     _create_test_repo_mixed(repo_dir)
 
     d = f"{repo_dir}/.engram"
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     # Do NOT enable git tracking
-    engram.engram_ingest_commits(d)
+    store.ingest_commits()
 
     file_count = len(list(Path(d, "decisions").glob("*.md")))
     assert_eq("no signals without git tracking", str(file_count), "0")
@@ -1754,7 +1802,8 @@ def test_ingest_noop_without_git_tracking():
 def test_find_incomplete():
     print("test_find_incomplete:")
     d = str(TEST_DIR / "test-find-incomplete" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "complete.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\ntags: [architecture]\nlinks: [related:other]\n---\n\n"
@@ -1767,9 +1816,9 @@ def test_find_incomplete():
         "# Incomplete decision\n\nThis decision is missing tags, rationale, and links.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_find_incomplete(d)
+    result = store.find_incomplete()
     assert_contains("finds incomplete signal", result, "incomplete")
     assert_contains("reports tags gap", result, "tags")
     assert_contains("reports sections gap", result, "sections")
@@ -1779,7 +1828,8 @@ def test_find_incomplete():
 def test_find_incomplete_empty():
     print("test_find_incomplete_empty:")
     d = str(TEST_DIR / "test-find-inc-empty" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "done.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\nlinks: [related:other]\n---\n\n"
@@ -1787,16 +1837,17 @@ def test_find_incomplete_empty():
         "## Rationale\n\nGood reasons.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_find_incomplete(d)
+    result = store.find_incomplete()
     assert_eq("no incomplete signals", result, "")
 
 
 def test_find_incomplete_source_classification():
     print("test_find_incomplete_source_classification:")
     d = str(TEST_DIR / "test-find-inc-source" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "agent-written.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
@@ -1807,9 +1858,9 @@ def test_find_incomplete_source_classification():
         "# Auto ingested from commit\n\nImported from git history automatically.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_find_incomplete(d)
+    result = store.find_incomplete()
     assert_contains("finds agent-written", result, "agent-written")
     assert_contains("finds auto-ingested", result, "auto-ingested")
 
@@ -1825,14 +1876,15 @@ def test_find_incomplete_source_classification():
 def test_stop_hook_backfill_nudge():
     print("test_stop_hook_backfill_nudge:")
     d = str(TEST_DIR / "test-stop-backfill" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "incomplete-stop.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
         "# Incomplete for stop test\n\nShort.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     import time
     time.sleep(1)
@@ -1855,14 +1907,15 @@ def test_stop_hook_backfill_nudge():
 def test_notification_backfill_nudge():
     print("test_notification_backfill_nudge:")
     d = str(TEST_DIR / "test-notif-backfill" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "incomplete-notif.md").write_text(
         "---\ntype: decision\ndate: 2026-03-17\n---\n\n"
         "# Incomplete for notification test\n\nShort.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     hook_script = str(SCRIPT_DIR.parent / "hooks" / "notification.sh")
     test_cwd = str(TEST_DIR / "test-notif-backfill")
@@ -1880,14 +1933,15 @@ def test_notification_backfill_nudge():
 def test_status_withdrawn_indexed():
     print("test_status_withdrawn_indexed:")
     d = str(TEST_DIR / "test-status-indexed" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "old-feature.md").write_text(
         "---\ntype: decision\ndate: 2026-03-10\ntags: [feature]\nstatus: withdrawn\n---\n\n"
         "# Add visualize skill\n\nFeature was planned but never implemented, withdrawing this decision.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     status_val = _db_scalar(f"{d}/index.db", "SELECT status FROM signals WHERE slug='old-feature'")
     assert_eq("status column stores withdrawn", status_val, "withdrawn")
@@ -1897,7 +1951,7 @@ def test_status_withdrawn_indexed():
         "# Keep this feature active\n\nThis decision is current and should default to active status.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
     active_val = _db_scalar(f"{d}/index.db", "SELECT status FROM signals WHERE slug='active-feature'")
     assert_eq("status defaults to active", active_val, "active")
@@ -1906,7 +1960,8 @@ def test_status_withdrawn_indexed():
 def test_brief_hides_withdrawn():
     print("test_brief_hides_withdrawn:")
     d = str(TEST_DIR / "test-brief-withdrawn" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "active-choice.md").write_text(
         "---\ntype: decision\ndate: 2026-03-15\ntags: [architecture]\n---\n\n"
@@ -1917,8 +1972,8 @@ def test_brief_hides_withdrawn():
         "# Add dashboard visualization\n\nFeature was planned but never built, no longer relevant to direction.\n"
     )
 
-    engram.engram_reindex(d)
-    engram.engram_brief(d)
+    store.reindex()
+    store.brief()
 
     brief = Path(d, "brief.md").read_text()
     assert_contains("brief shows active decision", brief, "Use PostgreSQL")
@@ -1929,7 +1984,8 @@ def test_brief_hides_withdrawn():
 def test_query_relevant_excludes_withdrawn():
     print("test_query_relevant_excludes_withdrawn:")
     d = str(TEST_DIR / "test-query-withdrawn" / ".engram")
-    engram.engram_init(d)
+    store = engram.EngramStore(d)
+    store.init()
 
     Path(d, "decisions", "active-storage.md").write_text(
         "---\ntype: decision\ndate: 2026-03-15\ntags: [storage]\n---\n\n"
@@ -1940,9 +1996,9 @@ def test_query_relevant_excludes_withdrawn():
         "# Use local disk for file storage\n\nWas planned but never implemented, switching to cloud storage.\n"
     )
 
-    engram.engram_reindex(d)
+    store.reindex()
 
-    result = engram.engram_query_relevant(d, "storage")
+    result = store.query_relevant("storage")
     assert_contains("shows active decision", result, "Use S3")
     assert_not_contains("hides withdrawn", result, "local disk")
 

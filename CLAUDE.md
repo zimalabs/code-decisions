@@ -47,13 +47,13 @@ plugins/engram/
 
 ## How the Index Stays Fresh
 
-No background jobs. Hooks call `engram_resync()` at session start and end, which runs the full pipeline:
+No background jobs. Hooks call `EngramStore.resync()` at session start and end, which runs the full pipeline:
 
 ```
-engram_resync → engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brief
+resync → ingest_commits → ingest_plans → reindex → brief
 ```
 
-`engram_reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds. Use `@engram:resync` to trigger this manually.
+`reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds. Use `@engram:resync` to trigger this manually.
 
 ## Architecture Rules
 
@@ -61,7 +61,7 @@ engram_resync → engram_ingest_commits → engram_ingest_plans → engram_reind
 2. **Append-only signals.** Don't delete or overwrite signal files. Write new ones.
 3. **Directory = privacy.** `_private/` path means excluded from brief and context injection. No config flags.
 4. **No CLI.** Capture via Write tool, query via `@engram:query` skill, everything else via hooks.
-5. **Pure functions in engram.py.** No side effects at import time. Every function takes `dir` as first arg.
+5. **Pure methods on EngramStore.** No side effects at import time. Store methods operate on `self.root`; module-level helpers are pure functions.
 
 ## Schema
 
@@ -118,7 +118,7 @@ What counts as significant: architecture changes, new features, refactors, depen
 
 - Table/FTS names: `signals`, `signals_fts` (not `notes`)
 - SQL: parameterized queries (`?` placeholders), never string interpolation
-- Frontmatter parsing: manual line-by-line via `_parse_frontmatter()` (no YAML parser dependency)
+- Frontmatter parsing: manual line-by-line via `Signal.from_text()` (no YAML parser dependency)
 - Hook timeout: 15 seconds (set in `hooks.json`)
 - Filenames: `{slug}.md`, slug via `_slugify()`
 - Stdlib only: no PyYAML, no pytest, no external dependencies
