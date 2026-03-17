@@ -28,8 +28,9 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nDid this session make significant code changes (features, architecture, refactors, deps) WITHOUT writing a .engram/decisions/ file?\n\nExempt: .engram/ files, tests, docs (README, CHANGELOG, LICENSE, docs/), formatting.\n\nIf yes: {\"ok\": false, \"reason\": \"Significant changes need a decision signal — use @engram:capture\"}\nIf no: {\"ok\": true}"
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/stop.sh",
+            "timeout": 5
           }
         ]
       }
@@ -93,8 +94,9 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Respond with ONLY a JSON object, nothing else.\n\nDoes the user's message contain decision language ('let's go with', 'we decided', 'switching to', 'going with')? Ignore hypotheticals ('should we', 'what if', 'maybe').\n\nIf decision detected (nudge once only): {\"ok\": true, \"reason\": \"That sounds like a decision — consider @engram:capture.\"}\nIf user asks about past decisions ('why did we', 'what was decided'): {\"ok\": true, \"reason\": \"Past signals may exist — consider @engram:query.\"}\nOtherwise: {\"ok\": true}"
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.sh",
+            "timeout": 5
           }
         ]
       }

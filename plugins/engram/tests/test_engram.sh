@@ -1844,6 +1844,59 @@ EOF
   assert_contains "pre-compact has decision context" "$output" "Compact test decision"
 }
 
+test_stop_hook_output() {
+  echo "test_stop_hook_output:"
+  local dir="$TEST_DIR/test-stop-hook/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  local hook_script="$SCRIPT_DIR/../hooks/stop.sh"
+
+  # Test: no recent signals — should still output ok:true (advisory)
+  local output
+  output=$(cd "$TEST_DIR/test-stop-hook" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+
+  # Must be valid JSON
+  if echo "$output" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    _pass "stop hook output is valid JSON"
+  else
+    _fail "stop hook output is valid JSON" "got: $output"
+  fi
+
+  # Must always be ok:true (advisory only)
+  assert_contains "stop hook is advisory" "$output" '"ok": true'
+}
+
+test_stop_hook_no_engram() {
+  echo "test_stop_hook_no_engram:"
+  local empty_dir="$TEST_DIR/test-stop-empty"
+  mkdir -p "$empty_dir"
+
+  local hook_script="$SCRIPT_DIR/../hooks/stop.sh"
+  local output
+  output=$(cd "$empty_dir" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." bash "$hook_script" 2>/dev/null)
+  assert_eq "ok when no .engram" "$output" '{"ok": true}'
+}
+
+test_user_prompt_submit_hook() {
+  echo "test_user_prompt_submit_hook:"
+  local hook_script="$SCRIPT_DIR/../hooks/user-prompt-submit.sh"
+
+  # Test: no decision language
+  local output
+  output=$(echo '{"content":"fix the bug in auth.rb"}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-ups-$$" bash "$hook_script" 2>/dev/null)
+  assert_eq "no nudge for normal prompt" "$output" "{}"
+
+  # Test: decision language
+  output=$(echo '{"content":"lets go with Redis for caching"}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-ups-decision-$$" bash "$hook_script" 2>/dev/null)
+  assert_contains "nudge for decision language" "$output" "engram:capture"
+
+  # Test: past decision query
+  output=$(echo '{"content":"why did we choose Redis?"}' | CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-ups-query-$$" bash "$hook_script" 2>/dev/null)
+  assert_contains "suggest query for past decisions" "$output" "engram:query"
+}
+
 test_pre_compact_no_engram() {
   echo "test_pre_compact_no_engram:"
   local empty_dir="$TEST_DIR/test-pre-compact-empty"
@@ -1957,11 +2010,10 @@ test_hooks_json_prompts() {
   post_prompt=$(jq -r '.hooks.PostToolUse[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
   assert_not_contains "PostToolUse is advisory only" "$post_prompt" '"ok": false'
 
-  # 7. Stop prompt contains both ok:true and ok:false
-  local stop_prompt
-  stop_prompt=$(jq -r '.hooks.Stop[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
-  assert_contains "Stop has ok:true" "$stop_prompt" '"ok": true'
-  assert_contains "Stop has ok:false" "$stop_prompt" '"ok": false'
+  # 7. Stop is a command hook (not prompt — prompt hooks are flaky for JSON validation)
+  local stop_has_command
+  stop_has_command=$(jq '[.hooks.Stop[0].hooks[] | select(.type == "command")] | length' "$hooks_file")
+  assert_eq "Stop has command hook" "$stop_has_command" "1"
 
   # 8. PreToolUse contains both ok:true and ok:false
   local pre_prompt
@@ -2401,6 +2453,12 @@ echo ""
 test_pre_compact_output
 echo ""
 test_pre_compact_no_engram
+echo ""
+test_stop_hook_output
+echo ""
+test_stop_hook_no_engram
+echo ""
+test_user_prompt_submit_hook
 echo ""
 test_hooks_json_structure
 echo ""
