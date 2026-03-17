@@ -7,6 +7,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Generator
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -56,7 +57,7 @@ class EngramStore:
         return bool(self.load_config().get("git_tracking", False))
 
     @contextlib.contextmanager
-    def connect(self):
+    def connect(self) -> Generator[sqlite3.Connection, None, None]:
         """Context manager for SQLite connections to index.db."""
         with _connect(self.db_path) as conn:
             yield conn

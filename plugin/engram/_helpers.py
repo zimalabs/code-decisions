@@ -7,13 +7,14 @@ import json
 import re
 import sqlite3
 import sys
+from collections.abc import Generator
 from pathlib import Path
 
 from ._constants import StrPath
 
 
 @contextlib.contextmanager
-def _connect(db_path: StrPath):
+def _connect(db_path: StrPath) -> Generator[sqlite3.Connection, None, None]:
     """Context manager for SQLite connections."""
     conn = sqlite3.connect(str(db_path))
     try:

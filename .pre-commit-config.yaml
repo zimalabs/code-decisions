@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.6
+    hooks:
+      - id: ruff-format
+        args: [plugin/engram/]
+        pass_filenames: false
+      - id: ruff
+        args: [--fix, plugin/engram/]
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy --config-file=pyproject.toml plugin/engram/
+        language: system
+        pass_filenames: false
+        types: [python]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        files: ^plugin/hooks/.*\.sh$
