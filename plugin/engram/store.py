@@ -1,4 +1,5 @@
 """EngramStore — manages an .engram directory."""
+
 from __future__ import annotations
 
 import contextlib
@@ -33,6 +34,7 @@ class EngramStore:
             return {}
         try:
             import tomllib
+
             return tomllib.loads(config_path.read_text())
         except Exception:
             return {}
@@ -85,6 +87,7 @@ class EngramStore:
     def init(self) -> bool:
         """Initialize .engram directory structure and index.db."""
         import engram
+
         if not _check_fts5():
             return False
         self.decisions_dir.mkdir(parents=True, exist_ok=True)
@@ -158,8 +161,21 @@ class EngramStore:
                 "(type, title, content, tags, source, date, file, private, "
                 "excerpt, slug, status, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (sig.sig_type, sig.title, sig.content, sig.tags, sig.source, sig.date,
-                 str(filepath), private, sig.excerpt, slug, sig.status, created_at, updated_at),
+                (
+                    sig.sig_type,
+                    sig.title,
+                    sig.content,
+                    sig.tags,
+                    sig.source,
+                    sig.date,
+                    str(filepath),
+                    private,
+                    sig.excerpt,
+                    slug,
+                    sig.status,
+                    created_at,
+                    updated_at,
+                ),
             )
 
             # Insert supersedes link
@@ -225,8 +241,7 @@ class EngramStore:
 
         # Must be in a git repo
         try:
-            subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                           capture_output=True, check=True)
+            subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, check=True)
         except (OSError, subprocess.CalledProcessError):
             return
 
@@ -297,7 +312,9 @@ class EngramStore:
             try:
                 stat_result = subprocess.run(
                     ["git", "show", "--stat", "--format=", commit_hash],
-                    capture_output=True, text=True, errors="replace",
+                    capture_output=True,
+                    text=True,
+                    errors="replace",
                 )
                 stat = stat_result.stdout.strip()
             except (OSError, subprocess.SubprocessError):
@@ -307,13 +324,14 @@ class EngramStore:
             try:
                 body_result = subprocess.run(
                     ["git", "log", "-1", "--format=%b", commit_hash],
-                    capture_output=True, text=True, errors="replace",
+                    capture_output=True,
+                    text=True,
+                    errors="replace",
                 )
                 body = body_result.stdout
                 # Strip Co-Authored-By lines
                 body = "\n".join(
-                    line for line in body.splitlines()
-                    if not line.lower().startswith("co-authored-by:")
+                    line for line in body.splitlines() if not line.lower().startswith("co-authored-by:")
                 ).strip()
             except (OSError, subprocess.SubprocessError):
                 body = ""
@@ -429,8 +447,7 @@ class EngramStore:
         with self.connect() as conn:
             # Build superseded set
             superseded_slugs = [
-                row[0] for row in
-                conn.execute("SELECT target_file FROM links WHERE rel_type='supersedes'").fetchall()
+                row[0] for row in conn.execute("SELECT target_file FROM links WHERE rel_type='supersedes'").fetchall()
             ]
 
             superseded_count = len(superseded_slugs)
@@ -510,9 +527,7 @@ class EngramStore:
                     brief += f"\n\n## Recent Decisions\n{decisions_text}"
 
             # Footer
-            private_count = conn.execute(
-                "SELECT COUNT(*) FROM signals WHERE private=1"
-            ).fetchone()[0]
+            private_count = conn.execute("SELECT COUNT(*) FROM signals WHERE private=1").fetchone()[0]
 
             footer_parts: list[str] = []
             if private_count > 0:
@@ -563,6 +578,7 @@ class EngramStore:
                 fm_text = f.read_text(errors="replace")
                 # Check for pin = true in frontmatter
                 from ._frontmatter import _split_frontmatter
+
                 fm, _ = _split_frontmatter(fm_text)
                 if fm.get("pin", False):
                     pinned.add(_slug(str(f)))
@@ -654,9 +670,7 @@ class EngramStore:
             return ""
 
         with self.connect() as conn:
-            total = conn.execute(
-                "SELECT COUNT(*) FROM signals WHERE private=0"
-            ).fetchone()[0]
+            total = conn.execute("SELECT COUNT(*) FROM signals WHERE private=0").fetchone()[0]
             if total < 5:
                 return ""
 
@@ -718,15 +732,16 @@ class EngramStore:
             return ""
 
         try:
-            subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                           capture_output=True, check=True)
+            subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, check=True)
         except (OSError, subprocess.CalledProcessError):
             return ""
 
         try:
             result = subprocess.run(
                 ["git", "status", "--porcelain", str(self.decisions_dir), str(self.private_dir)],
-                capture_output=True, text=True, errors="replace",
+                capture_output=True,
+                text=True,
+                errors="replace",
             )
             lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
         except (OSError, subprocess.SubprocessError):

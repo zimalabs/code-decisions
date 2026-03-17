@@ -1,4 +1,5 @@
 """Content validation for pre-tool-use hook."""
+
 from __future__ import annotations
 
 import sys

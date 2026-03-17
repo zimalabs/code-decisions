@@ -1,4 +1,5 @@
 """Policy definitions — one Policy per hook behavior, ported from shell scripts."""
+
 from __future__ import annotations
 
 import re
@@ -15,20 +16,77 @@ from .store import EngramStore
 ENGRAM_DIR = ".engram"
 
 # Code noise words to filter from content keyword extraction
-_CODE_NOISE = frozenset({
-    "self", "return", "import", "from", "class", "def", "none", "true",
-    "false", "with", "elif", "else", "pass", "raise", "yield", "async",
-    "await", "lambda", "assert", "global", "while", "break", "continue",
-    "except", "finally", "print", "super", "init", "args", "kwargs",
-    "dict", "list", "tuple", "str", "int", "float", "bool", "type",
-    "null", "undefined", "const", "function", "this", "that", "var",
-    "void", "new", "delete", "typeof", "instanceof", "require", "module",
-    "exports", "default", "value", "name", "data", "result", "error",
-    "string", "number", "object", "array",
-})
+_CODE_NOISE = frozenset(
+    {
+        "self",
+        "return",
+        "import",
+        "from",
+        "class",
+        "def",
+        "none",
+        "true",
+        "false",
+        "with",
+        "elif",
+        "else",
+        "pass",
+        "raise",
+        "yield",
+        "async",
+        "await",
+        "lambda",
+        "assert",
+        "global",
+        "while",
+        "break",
+        "continue",
+        "except",
+        "finally",
+        "print",
+        "super",
+        "init",
+        "args",
+        "kwargs",
+        "dict",
+        "list",
+        "tuple",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "type",
+        "null",
+        "undefined",
+        "const",
+        "function",
+        "this",
+        "that",
+        "var",
+        "void",
+        "new",
+        "delete",
+        "typeof",
+        "instanceof",
+        "require",
+        "module",
+        "exports",
+        "default",
+        "value",
+        "name",
+        "data",
+        "result",
+        "error",
+        "string",
+        "number",
+        "object",
+        "array",
+    }
+)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
 
 def _extract_content_keywords(data: dict[str, Any], max_words: int = 3) -> list[str]:
     """Extract meaningful words from edit/write content for search."""
@@ -85,10 +143,12 @@ def _is_engram_signal_path(path: str) -> bool:
 def _json_escape(s: str) -> str:
     """Escape a string for embedding in JSON."""
     import json
+
     return json.dumps(s)[1:-1]  # strip surrounding quotes
 
 
 # ── BLOCK policies ───────────────────────────────────────────────────
+
 
 def _commit_gate_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
     """Nudge about missing signals on git commit (no longer blocks)."""
@@ -130,7 +190,8 @@ def _delete_guard_condition(data: dict[str, Any], state: SessionState) -> Policy
     # rm targeting specific signal files
     if re.search(r"rm\b.*\.engram/decisions/", cmd) or re.search(r"rm\b.*\.engram/_private/decisions/", cmd):
         return PolicyResult(
-            matched=True, decision="block",
+            matched=True,
+            decision="block",
             reason=(
                 "Signals are append-only \u2014 do not delete .engram/ decision files. "
                 "Write a new signal with status: withdrawn instead."
@@ -140,14 +201,16 @@ def _delete_guard_condition(data: dict[str, Any], state: SessionState) -> Policy
     # rm -rf or rm -r targeting .engram
     if re.search(r"rm\b.*-r[f ]?.*\.engram", cmd) or re.search(r"rm\b.*-rf.*\.engram", cmd):
         return PolicyResult(
-            matched=True, decision="block",
+            matched=True,
+            decision="block",
             reason="Do not delete the .engram/ directory or its contents. Signals are append-only.",
         )
 
     # git checkout -- .engram/decisions/
     if re.search(r"git checkout.*--.*\.engram/(decisions|_private)/", cmd):
         return PolicyResult(
-            matched=True, decision="block",
+            matched=True,
+            decision="block",
             reason=(
                 "Do not revert .engram/ signal files. Signals are append-only \u2014 "
                 "write a new signal with status: withdrawn instead."
@@ -157,7 +220,8 @@ def _delete_guard_condition(data: dict[str, Any], state: SessionState) -> Policy
     # git restore .engram/decisions/
     if re.search(r"git restore.*\.engram/(decisions|_private)/", cmd):
         return PolicyResult(
-            matched=True, decision="block",
+            matched=True,
+            decision="block",
             reason="Do not restore/revert .engram/ signal files. Signals are append-only.",
         )
 
@@ -181,7 +245,8 @@ def _edit_guard_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     new_string = ti.get("new_string", "")
     if not new_string:
         return PolicyResult(
-            matched=True, decision="block",
+            matched=True,
+            decision="block",
             reason=(
                 "Signals are append-only \u2014 do not delete content from .engram/ decision files. "
                 "To retract a decision, set status: withdrawn in frontmatter."
@@ -207,12 +272,15 @@ def _content_validation_condition(data: dict[str, Any], state: SessionState) -> 
 
     # Validate using Signal.validate() for consistency
     from .signal import Signal
+
     sig = Signal.from_text(content)
     ok, errors = sig.validate()
 
     if not ok:
         return PolicyResult(
-            matched=True, ok=False, decision="reject",
+            matched=True,
+            ok=False,
+            decision="reject",
             reason=errors,
         )
 
@@ -220,6 +288,7 @@ def _content_validation_condition(data: dict[str, Any], state: SessionState) -> 
 
 
 # ── LIFECYCLE policies ───────────────────────────────────────────────
+
 
 def _session_init_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
     """Initialize engram and resync at session start."""
@@ -282,6 +351,7 @@ def _push_resync_condition(data: dict[str, Any], state: SessionState) -> PolicyR
 
 # ── CONTEXT policies ────────────────────────────────────────────────
 
+
 def _session_context_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
     """Inject brief and behavioral instructions at session start."""
     brief_path = Path(ENGRAM_DIR) / "brief.md"
@@ -337,9 +407,22 @@ def _related_context_condition(data: dict[str, Any], state: SessionState) -> Pol
     # Skip .engram/ paths, tests, docs, config files
     skip_patterns = (
         ".engram/",
-        "_test.", ".test.", "/tests/", "/test/", "/spec/", "tests/", "test/", "spec/",
-        ".md", "/docs/", "/doc/",
-        ".json", ".yaml", ".yml", ".toml", ".lock",
+        "_test.",
+        ".test.",
+        "/tests/",
+        "/test/",
+        "/spec/",
+        "tests/",
+        "test/",
+        "spec/",
+        ".md",
+        "/docs/",
+        "/doc/",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".lock",
     )
     if any(pat in fp for pat in skip_patterns):
         return None
@@ -387,9 +470,7 @@ def _subagent_context_condition(data: dict[str, Any], state: SessionState) -> Po
     # Nudge about capture (once per session)
     if not state.has_fired("subagent-context"):
         state.mark_fired("subagent-context")
-        msg_parts.append(
-            "If this subagent made architectural decisions, capture them with /engram:capture."
-        )
+        msg_parts.append("If this subagent made architectural decisions, capture them with /engram:capture.")
 
     if not msg_parts:
         return None
@@ -425,6 +506,7 @@ def _compact_context_condition(data: dict[str, Any], state: SessionState) -> Pol
 
 # ── NUDGE policies ──────────────────────────────────────────────────
 
+
 def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
     """Nudge about decision capture after code edits (once per session, after 3+ edits)."""
     fp = _extract_file_path(data)
@@ -434,9 +516,22 @@ def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> Polic
     # Skip .engram/ paths, tests, docs, config files
     skip_patterns = (
         ".engram/",
-        "_test.", ".test.", "/tests/", "/test/", "/spec/", "tests/", "test/", "spec/",
-        ".md", "/docs/", "/doc/",
-        ".json", ".yaml", ".yml", ".toml", ".lock",
+        "_test.",
+        ".test.",
+        "/tests/",
+        "/test/",
+        "/spec/",
+        "tests/",
+        "test/",
+        "spec/",
+        ".md",
+        "/docs/",
+        "/doc/",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".lock",
     )
     if any(pat in fp for pat in skip_patterns):
         return None
@@ -477,13 +572,12 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
             try:
                 store = EngramStore(ENGRAM_DIR)
                 with store.connect() as conn:
-                    invalid_count = conn.execute(
-                        "SELECT COUNT(*) FROM signals WHERE status='invalid'"
-                    ).fetchone()[0]
+                    invalid_count = conn.execute("SELECT COUNT(*) FROM signals WHERE status='invalid'").fetchone()[0]
                 if invalid_count > 0:
                     state.mark_fired("backfill-nudge")
                     return PolicyResult(
-                        matched=True, ok=True,
+                        matched=True,
+                        ok=True,
                         reason=f"{invalid_count} incomplete signal(s) \u2014 consider /engram:backfill to enrich them.",
                     )
             except sqlite3.Error:
@@ -504,7 +598,8 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
         files_summary += f" (+{len(edited) - 10} more)"
 
     return PolicyResult(
-        matched=True, ok=True,
+        matched=True,
+        ok=True,
         reason=(
             f"Session reflection: you edited {len(edited)} file(s): {files_summary}. "
             "Which of these changes were significant decisions "
@@ -530,7 +625,8 @@ def _decision_language_condition(data: dict[str, Any], state: SessionState) -> P
     # Check for past-decision queries (always respond, no dedup)
     if re.search(r"(why did we|what was decided|what did we decide|remind me)", prompt_lower):
         return PolicyResult(
-            matched=True, ok=True,
+            matched=True,
+            ok=True,
             reason="Past signals may exist \u2014 consider /engram:query.",
         )
 
@@ -546,7 +642,8 @@ def _decision_language_condition(data: dict[str, Any], state: SessionState) -> P
             return None
         state.mark_fired(dedup_key)
         return PolicyResult(
-            matched=True, ok=True,
+            matched=True,
+            ok=True,
             reason="That sounds like a decision \u2014 consider /engram:capture.",
         )
 
@@ -562,9 +659,7 @@ def _incomplete_nudge_condition(data: dict[str, Any], state: SessionState) -> Po
     try:
         store = EngramStore(ENGRAM_DIR)
         with store.connect() as conn:
-            invalid_count = conn.execute(
-                "SELECT COUNT(*) FROM signals WHERE status='invalid'"
-            ).fetchone()[0]
+            invalid_count = conn.execute("SELECT COUNT(*) FROM signals WHERE status='invalid'").fetchone()[0]
     except sqlite3.Error:
         return None
 

@@ -1,4 +1,5 @@
 """Pure helper functions used across the engram package."""
+
 from __future__ import annotations
 
 import contextlib

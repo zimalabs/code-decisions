@@ -1,4 +1,5 @@
 """Commit classification and path-to-keywords helpers."""
+
 from __future__ import annotations
 
 import re
@@ -40,7 +41,9 @@ def _is_decision_commit(subject: str, commit_hash: str) -> bool:
     try:
         result = subprocess.run(
             ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit_hash],
-            capture_output=True, text=True, errors="replace",
+            capture_output=True,
+            text=True,
+            errors="replace",
         )
         files = [f for f in result.stdout.strip().splitlines() if f.strip()]
         if len(files) >= 2 and _DECISION_FILES.search(result.stdout):

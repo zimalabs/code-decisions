@@ -1,4 +1,5 @@
 """CLI dispatch — enables `python3 -m engram <command>`."""
+
 from __future__ import annotations
 
 import json

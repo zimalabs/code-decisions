@@ -1,4 +1,5 @@
 """Constants used across the engram package."""
+
 from __future__ import annotations
 
 import re
@@ -26,15 +27,28 @@ _DECISION_FILES = re.compile(
 )
 
 # Merge/trivial commit patterns
-_SKIP_PATTERNS = re.compile(
-    r"^(merge branch|merge pull|bump version|wip$|wip:|fixup!|squash!)"
-)
+_SKIP_PATTERNS = re.compile(r"^(merge branch|merge pull|bump version|wip$|wip:|fixup!|squash!)")
 
 # Noise words for path_to_keywords
-_NOISE_WORDS = frozenset([
-    "src", "lib", "app", "index", "test", "spec",
-    "the", "and", "is", "of", "to", "in", "for", "a", "an",
-])
+_NOISE_WORDS = frozenset(
+    [
+        "src",
+        "lib",
+        "app",
+        "index",
+        "test",
+        "spec",
+        "the",
+        "and",
+        "is",
+        "of",
+        "to",
+        "in",
+        "for",
+        "a",
+        "an",
+    ]
+)
 
 # ── Type aliases ─────────────────────────────────────────────────────
 

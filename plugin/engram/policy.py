@@ -1,4 +1,5 @@
 """Policy engine — evaluates registered policies for hook events."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -14,6 +15,7 @@ from typing import Any
 
 class PolicyLevel(enum.IntEnum):
     """Evaluation priority — lower numeric value = evaluated first."""
+
     BLOCK = 0
     LIFECYCLE = 1
     CONTEXT = 2
@@ -23,12 +25,13 @@ class PolicyLevel(enum.IntEnum):
 @dataclasses.dataclass
 class PolicyResult:
     """Structured output from a policy evaluation."""
+
     matched: bool = False
-    decision: str = ""        # "block" or empty
+    decision: str = ""  # "block" or empty
     reason: str = ""
     system_message: str = ""
     additional_context: str = ""
-    ok: bool = True           # for Stop/UserPromptSubmit hooks
+    ok: bool = True  # for Stop/UserPromptSubmit hooks
     suppress_output: bool = False
 
     def to_hook_json(self, event: str) -> dict[str, Any]:
@@ -62,6 +65,7 @@ class PolicyResult:
 @dataclasses.dataclass
 class Policy:
     """A single enforceable policy."""
+
     name: str
     description: str
     level: PolicyLevel
@@ -177,13 +181,9 @@ class PolicyEngine:
 
     def apply_config(self, config: dict[str, str]) -> None:
         """Disable policies listed as 'off' in config."""
-        self._disabled = {
-            name for name, value in config.items()
-            if value == "off"
-        }
+        self._disabled = {name for name, value in config.items() if value == "off"}
 
-    def evaluate(self, event: str, input_data: dict[str, Any],
-                 session_state: SessionState) -> str:
+    def evaluate(self, event: str, input_data: dict[str, Any], session_state: SessionState) -> str:
         """Filter policies by event/matcher, run conditions, return JSON."""
         # Record edits for activity tracking
         if event == "PostToolUse":
@@ -199,10 +199,7 @@ class PolicyEngine:
         tool_name = input_data.get("tool_name", "*")
 
         # Filter matching policies, sorted by level priority
-        matching = [
-            p for p in self._policies
-            if _matches_event(p, event, tool_name)
-        ]
+        matching = [p for p in self._policies if _matches_event(p, event, tool_name)]
         matching.sort(key=lambda p: p.level)
 
         merged_messages: list[str] = []
@@ -215,18 +212,30 @@ class PolicyEngine:
         for policy in matching:
             # Skip disabled policies
             if policy.name in self._disabled:
-                self._last_trace.append({
-                    "policy": policy.name, "level": policy.level.name,
-                    "matched": False, "skipped": "disabled", "decision": "", "elapsed_ms": 0,
-                })
+                self._last_trace.append(
+                    {
+                        "policy": policy.name,
+                        "level": policy.level.name,
+                        "matched": False,
+                        "skipped": "disabled",
+                        "decision": "",
+                        "elapsed_ms": 0,
+                    }
+                )
                 continue
 
             # once_per_session check
             if policy.once_per_session and session_state.has_fired(policy.name):
-                self._last_trace.append({
-                    "policy": policy.name, "level": policy.level.name,
-                    "matched": False, "skipped": "once_per_session", "decision": "", "elapsed_ms": 0,
-                })
+                self._last_trace.append(
+                    {
+                        "policy": policy.name,
+                        "level": policy.level.name,
+                        "matched": False,
+                        "skipped": "once_per_session",
+                        "decision": "",
+                        "elapsed_ms": 0,
+                    }
+                )
                 continue
 
             t0 = time.monotonic()
@@ -234,28 +243,46 @@ class PolicyEngine:
                 result = policy.condition(input_data, session_state)
             except Exception as exc:
                 elapsed = round((time.monotonic() - t0) * 1000, 1)
-                self._last_trace.append({
-                    "policy": policy.name, "level": policy.level.name,
-                    "matched": False, "skipped": f"error: {exc}", "decision": "", "elapsed_ms": elapsed,
-                })
+                self._last_trace.append(
+                    {
+                        "policy": policy.name,
+                        "level": policy.level.name,
+                        "matched": False,
+                        "skipped": f"error: {exc}",
+                        "decision": "",
+                        "elapsed_ms": elapsed,
+                    }
+                )
                 print(f"engram: policy {policy.name} error: {exc}", file=sys.stderr)
                 continue
             elapsed = round((time.monotonic() - t0) * 1000, 1)
 
             if result is None or not result.matched:
-                self._last_trace.append({
-                    "policy": policy.name, "level": policy.level.name,
-                    "matched": False, "skipped": "", "decision": "", "elapsed_ms": elapsed,
-                })
+                self._last_trace.append(
+                    {
+                        "policy": policy.name,
+                        "level": policy.level.name,
+                        "matched": False,
+                        "skipped": "",
+                        "decision": "",
+                        "elapsed_ms": elapsed,
+                    }
+                )
                 continue
 
             any_matched = True
             decision = result.decision or ""
 
-            self._last_trace.append({
-                "policy": policy.name, "level": policy.level.name,
-                "matched": True, "skipped": "", "decision": decision, "elapsed_ms": elapsed,
-            })
+            self._last_trace.append(
+                {
+                    "policy": policy.name,
+                    "level": policy.level.name,
+                    "matched": True,
+                    "skipped": "",
+                    "decision": decision,
+                    "elapsed_ms": elapsed,
+                }
+            )
 
             # Mark fired if once_per_session
             if policy.once_per_session:
@@ -280,12 +307,14 @@ class PolicyEngine:
 
         # Build merged response
         if event == "SessionStart" and merged_context:
-            return json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": "\n\n".join(merged_context),
+            return json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "SessionStart",
+                        "additionalContext": "\n\n".join(merged_context),
+                    }
                 }
-            })
+            )
 
         if event in ("Stop", "UserPromptSubmit"):
             if any_matched:

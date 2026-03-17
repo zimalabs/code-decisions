@@ -1,4 +1,5 @@
 """Signal dataclass — parsed representation of a signal markdown file."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -13,6 +14,7 @@ from ._helpers import _parse_links
 @dataclasses.dataclass
 class Signal:
     """Parsed representation of a signal markdown file."""
+
     title: str = ""
     body: str = ""
     sig_type: str = "decision"

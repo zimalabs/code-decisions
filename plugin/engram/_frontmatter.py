@@ -1,4 +1,5 @@
 """Frontmatter parsing shared across signal and validation modules."""
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,7 @@ def _split_frontmatter(text: str) -> tuple[dict, list[str]]:
         else:
             normalized[key] = str(val)
 
-    return normalized, lines[end + 1:]
+    return normalized, lines[end + 1 :]
 
 
 def _format_toml_frontmatter(fields: dict) -> str:
