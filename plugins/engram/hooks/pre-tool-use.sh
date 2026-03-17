@@ -19,8 +19,21 @@ case "$file_path" in
   *) printf '{}\n'; exit 0 ;;
 esac
 
-# Extract file content from tool_input
-# For Write: "content" field. For Edit: we can't validate partial edits, skip.
+# ── Edit tool: block content deletion from signal files ──
+# Edit has old_string + new_string. Block if new_string is empty (content removal).
+old_string=$(printf '%s' "$input" | sed -n 's/.*"old_string" *: *"\([^"]*\)".*/\1/p')
+if [ -n "$old_string" ]; then
+  new_string=$(printf '%s' "$input" | sed -n 's/.*"new_string" *: *"\([^"]*\)".*/\1/p')
+  if [ -z "$new_string" ]; then
+    printf '{"decision": "block", "reason": "Signals are append-only — do not delete content from .engram/ decision files. To retract a decision, set status: withdrawn in frontmatter."}\n'
+    exit 0
+  fi
+  # Allow other edits (adding tags, fixing typos, appending sections)
+  printf '{}\n'
+  exit 0
+fi
+
+# ── Write tool: validate full content ──
 content=$(printf '%s' "$input" | sed -n 's/.*"content" *: *"\(.*\)"/\1/p')
 [ -z "$content" ] && { printf '{}\n'; exit 0; }
 

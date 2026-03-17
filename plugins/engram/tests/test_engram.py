@@ -2068,6 +2068,184 @@ def test_pre_commit_gate():
     assert_eq("allows commit with recent decision", output, "{}")
 
 
+def test_pre_delete_guard():
+    print("test_pre_delete_guard:")
+    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-delete-guard.sh")
+
+    # Setup: create .engram with a signal
+    d = str(TEST_DIR / "test-pre-delete-guard" / ".engram")
+    store = engram.EngramStore(d)
+    store.init()
+    Path(d, "decisions", "keep-me.md").write_text(
+        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n# Keep me\n\nThis should not be deleted.\n"
+    )
+    test_cwd = str(TEST_DIR / "test-pre-delete-guard")
+
+    # rm on signal file → block
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"rm .engram/decisions/keep-me.md"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_contains("blocks rm on signal file", output, '"decision": "block"')
+    assert_contains("mentions append-only", output, "append-only")
+
+    # rm -rf on .engram → block
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"rm -rf .engram"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_contains("blocks rm -rf on .engram", output, '"decision": "block"')
+
+    # git checkout -- on signal → block
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git checkout -- .engram/decisions/keep-me.md"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_contains("blocks git checkout on signal", output, '"decision": "block"')
+
+    # git restore on signal → block
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git restore .engram/decisions/keep-me.md"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_contains("blocks git restore on signal", output, '"decision": "block"')
+
+    # Non-engram rm → allow
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"rm src/old-file.py"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("allows rm on non-engram file", output, "{}")
+
+    # Non-destructive git command → allow
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git status"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("allows non-destructive commands", output, "{}")
+
+
+def test_pre_tool_use_edit_guard():
+    print("test_pre_tool_use_edit_guard:")
+    hook_script = str(SCRIPT_DIR.parent / "hooks" / "pre-tool-use.sh")
+
+    # Edit that deletes content from signal → block
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"file_path":".engram/decisions/test.md","old_string":"## Rationale\\n\\nThis is important.","new_string":""}}',
+        capture_output=True, text=True,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_contains("blocks content deletion edit", output, '"decision": "block"')
+    assert_contains("mentions append-only", output, "append-only")
+
+    # Edit that modifies content (non-empty new_string) → allow
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"file_path":".engram/decisions/test.md","old_string":"tags: []","new_string":"tags: [architecture]"}}',
+        capture_output=True, text=True,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("allows content-modifying edit", output, "{}")
+
+    # Edit on non-engram file → allow (no old_string check)
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"file_path":"src/app.rb","old_string":"old","new_string":"new"}}',
+        capture_output=True, text=True,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("allows edit on non-engram file", output, "{}")
+
+
+def test_subagent_stop_context():
+    print("test_subagent_stop_context:")
+
+    # Setup: create .engram with brief
+    d = str(TEST_DIR / "test-subagent-context" / ".engram")
+    store = engram.EngramStore(d)
+    store.init()
+    Path(d, "decisions", "test-decision.md").write_text(
+        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n"
+        "# Test decision for subagent\n\nSubagents should see this decision in their context.\n"
+    )
+    store.reindex()
+    store.brief()
+
+    hook_script = str(SCRIPT_DIR.parent / "hooks" / "subagent-stop.sh")
+    test_cwd = str(TEST_DIR / "test-subagent-context")
+
+    # Use unique session ID to avoid dedup
+    output = subprocess.run(
+        ["bash", hook_script],
+        input="{}",
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent),
+             "CLAUDE_SESSION_ID": f"test-subagent-{id(test_subagent_stop_context)}"},
+    ).stdout.strip()
+
+    parsed = json.loads(output)
+    assert_contains("subagent gets brief context", parsed.get("systemMessage", ""), "Decision Context")
+    assert_contains("subagent gets decision title", parsed.get("systemMessage", ""), "Test decision for subagent")
+    assert_contains("subagent gets capture nudge", parsed.get("systemMessage", ""), "@engram:capture")
+
+
+def test_post_push_resync():
+    print("test_post_push_resync:")
+    hook_script = str(SCRIPT_DIR.parent / "hooks" / "post-push-resync.sh")
+
+    # No .engram → pass through
+    no_engram_dir = str(TEST_DIR / "test-post-push-no-engram")
+    Path(no_engram_dir).mkdir(parents=True, exist_ok=True)
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git push origin main"}}',
+        capture_output=True, text=True, cwd=no_engram_dir,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("no engram dir passes through", output, "{}")
+
+    # Non-push command → pass through
+    d = str(TEST_DIR / "test-post-push" / ".engram")
+    store = engram.EngramStore(d)
+    store.init()
+    test_cwd = str(TEST_DIR / "test-post-push")
+
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git status"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    assert_eq("non-push command passes through", output, "{}")
+
+    # git push → resync message
+    Path(d, "decisions", "push-test.md").write_text(
+        "---\ntype: decision\ndate: 2026-03-17\ntags: [test]\n---\n\n"
+        "# Push test\n\nThis should be resynced after push.\n"
+    )
+    output = subprocess.run(
+        ["bash", hook_script],
+        input='{"tool_input":{"command":"git push origin main"}}',
+        capture_output=True, text=True, cwd=test_cwd,
+        env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(SCRIPT_DIR.parent)},
+    ).stdout.strip()
+    parsed = json.loads(output)
+    assert_contains("push triggers resync message", parsed.get("systemMessage", ""), "resynced")
+
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -2146,6 +2324,10 @@ if __name__ == "__main__":
         test_brief_hides_withdrawn,
         test_query_relevant_excludes_withdrawn,
         test_pre_commit_gate,
+        test_pre_delete_guard,
+        test_pre_tool_use_edit_guard,
+        test_subagent_stop_context,
+        test_post_push_resync,
     ]
 
     for test in tests:
