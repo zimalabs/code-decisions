@@ -778,6 +778,38 @@ engram_tag_summary() {
   printf 'Top topics: %s' "$parts"
 }
 
+# ── Find incomplete signals ───────────────────────────────────────
+
+engram_find_incomplete() {
+  local dir="$1"
+  local limit="${2:-5}"
+
+  [ -f "$dir/index.db" ] || return 0
+
+  # Find signals with gaps: missing tags, missing body sections, or no links.
+  # Output: file_stem|title|gap_types (pipe-delimited, one per line)
+  sqlite3 -separator '|' "$dir/index.db" "
+    SELECT s.file_stem, s.title,
+      CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END
+      || CASE WHEN s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END
+      || CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END
+      AS gap_types
+    FROM signals s
+    LEFT JOIN links l ON l.source_file = s.file_stem
+    LEFT JOIN links l2 ON l2.target_file = s.file_stem
+    WHERE (s.tags = '[]' OR s.tags = ''
+      OR (s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%')
+      OR (l.source_file IS NULL AND l2.target_file IS NULL))
+    GROUP BY s.file_stem
+    ORDER BY s.date DESC
+    LIMIT $limit;
+  " 2>/dev/null | while IFS='|' read -r stem title gaps; do
+    # Trim trailing comma from gap_types
+    gaps="${gaps%,}"
+    printf '%s|%s|%s\n' "$stem" "$title" "$gaps"
+  done
+}
+
 # ── Full sync pipeline ─────────────────────────────────────────────
 
 engram_resync() {

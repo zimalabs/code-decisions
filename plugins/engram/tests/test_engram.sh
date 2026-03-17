@@ -2308,6 +2308,199 @@ test_ingest_noop_without_git_tracking() {
   cd "$SCRIPT_DIR"
 }
 
+# ── Find incomplete tests ─────────────────────────────────────────
+
+test_find_incomplete() {
+  echo "test_find_incomplete:"
+  local dir="$TEST_DIR/test-find-incomplete/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Complete signal (has tags, rationale section)
+  cat > "$dir/decisions/complete.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+tags: [architecture]
+links: [related:other]
+---
+
+# Complete decision
+
+This decision has proper rationale and tags for validation.
+
+## Rationale
+
+We chose this because it was the best option.
+
+## Alternatives
+
+- Option B was considered but rejected.
+EOF
+
+  # Incomplete signal (missing tags, no sections, no links)
+  cat > "$dir/decisions/incomplete.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+---
+
+# Incomplete decision
+
+This decision is missing tags, rationale, and links.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  local result
+  result=$(engram_find_incomplete "$dir")
+  assert_contains "finds incomplete signal" "$result" "incomplete"
+  assert_contains "reports tags gap" "$result" "tags"
+  assert_contains "reports sections gap" "$result" "sections"
+  assert_contains "reports links gap" "$result" "links"
+}
+
+test_find_incomplete_empty() {
+  echo "test_find_incomplete_empty:"
+  local dir="$TEST_DIR/test-find-inc-empty/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # All complete: has tags, rationale, and links
+  cat > "$dir/decisions/done.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+tags: [test]
+links: [related:other]
+---
+
+# Done decision
+
+This decision has everything it needs and should not appear.
+
+## Rationale
+
+Good reasons.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  local result
+  result=$(engram_find_incomplete "$dir")
+  assert_eq "no incomplete signals" "$result" ""
+}
+
+test_find_incomplete_source_classification() {
+  echo "test_find_incomplete_source_classification:"
+  local dir="$TEST_DIR/test-find-inc-source/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Agent-written signal (no source field) — incomplete
+  cat > "$dir/decisions/agent-written.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+---
+
+# Agent written decision
+
+This was written by the agent during the session.
+EOF
+
+  # Auto-ingested signal (has source: git:) — incomplete
+  cat > "$dir/decisions/auto-ingested.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+source: git:abc123
+---
+
+# Auto ingested from commit
+
+Imported from git history automatically.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  local result
+  result=$(engram_find_incomplete "$dir")
+  assert_contains "finds agent-written" "$result" "agent-written"
+  assert_contains "finds auto-ingested" "$result" "auto-ingested"
+
+  # Verify source field is queryable for classification
+  local agent_source
+  agent_source=$(sqlite3 "$dir/index.db" "SELECT source FROM signals WHERE file_stem='agent-written';")
+  assert_eq "agent-written has empty source" "$agent_source" ""
+
+  local git_source
+  git_source=$(sqlite3 "$dir/index.db" "SELECT source FROM signals WHERE file_stem='auto-ingested';")
+  assert_contains "auto-ingested has git source" "$git_source" "git:"
+}
+
+test_stop_hook_backfill_nudge() {
+  echo "test_stop_hook_backfill_nudge:"
+  local dir="$TEST_DIR/test-stop-backfill/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Create an incomplete signal
+  cat > "$dir/decisions/incomplete-stop.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+---
+
+# Incomplete for stop test
+
+Short.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  # Touch the file to make it "recent" (newer than index.db)
+  sleep 1
+  touch "$dir/decisions/incomplete-stop.md"
+
+  local hook_script="$SCRIPT_DIR/../hooks/stop.sh"
+  local output
+  output=$(cd "$TEST_DIR/test-stop-backfill" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-stop-bf-$$" bash "$hook_script" 2>/dev/null)
+  assert_contains "stop hook nudges backfill" "$output" "backfill"
+  assert_contains "stop hook is advisory" "$output" '"ok": true'
+}
+
+test_notification_backfill_nudge() {
+  echo "test_notification_backfill_nudge:"
+  local dir="$TEST_DIR/test-notif-backfill/.engram"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  # Create an incomplete signal
+  cat > "$dir/decisions/incomplete-notif.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+---
+
+# Incomplete for notification test
+
+Short.
+EOF
+
+  engram_reindex "$dir" 2>/dev/null
+
+  local hook_script="$SCRIPT_DIR/../hooks/notification.sh"
+  local output
+  output=$(cd "$TEST_DIR/test-notif-backfill" && CLAUDE_PLUGIN_ROOT="$SCRIPT_DIR/.." CLAUDE_SESSION_ID="test-notif-bf-$$" bash "$hook_script" 2>/dev/null)
+  assert_contains "notification nudges backfill" "$output" "backfill"
+}
+
 # ── Run all tests ───────────────────────────────────────────────────
 
 echo "=== engram v0.2 test suite ==="
@@ -2438,6 +2631,16 @@ echo ""
 test_ingest_noop_without_git_tracking
 echo ""
 test_resync
+echo ""
+test_find_incomplete
+echo ""
+test_find_incomplete_empty
+echo ""
+test_find_incomplete_source_classification
+echo ""
+test_stop_hook_backfill_nudge
+echo ""
+test_notification_backfill_nudge
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

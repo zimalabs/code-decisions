@@ -19,7 +19,7 @@ invalid_count=$(sqlite3 "$ENGRAM_DIR/index.db" "SELECT COUNT(*) FROM signals WHE
 
 if [ "$invalid_count" -gt 0 ]; then
   touch "$session_file"
-  printf '{"systemMessage":"%d incomplete decision(s) — consider @engram:introspect to fill gaps."}\n' "$invalid_count"
+  printf '{"systemMessage":"%d incomplete decision(s) — consider @engram:backfill to enrich them."}\n' "$invalid_count"
 else
   printf '{}\n'
 fi
