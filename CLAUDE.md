@@ -32,6 +32,7 @@ plugins/engram/
   skills/
     capture/SKILL.md      # Write signal files via Write tool (reads schemas/)
     query/SKILL.md        # SQL queries against index.db
+    resync/SKILL.md       # Full sync: ingest + reindex + brief
   tests/
     test_engram.sh        # Test suite
     run_tests.sh          # Test runner wrapper
@@ -46,13 +47,13 @@ plugins/engram/
 
 ## How the Index Stays Fresh
 
-No background jobs. Hooks run the full pipeline at session start and end:
+No background jobs. Hooks call `engram_resync()` at session start and end, which runs the full pipeline:
 
 ```
-engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brief
+engram_resync → engram_ingest_commits → engram_ingest_plans → engram_reindex → engram_brief
 ```
 
-`engram_reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds.
+`engram_reindex()` does a destructive rebuild — drops `index.db`, recreates from `schema.sql`, re-indexes every `.md` file. The `meta` table (ingestion cursors) is preserved across rebuilds. Use `@engram:resync` to trigger this manually.
 
 ## Architecture Rules
 

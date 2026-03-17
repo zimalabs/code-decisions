@@ -176,91 +176,6 @@ test_init_private_dirs() {
   assert_dir_exists "_private dir" "$dir/_private"
 }
 
-test_init_upgrade_gitignore() {
-  echo "test_init_upgrade_gitignore:"
-  local dir="$TEST_DIR/test-upgrade-gitignore/.engram"
-
-  mkdir -p "$dir"
-  # Create old-style .gitignore without _private/ or brief.md (simulates existing user)
-  echo "index.db" > "$dir/.gitignore"
-
-  source "$LIB"
-  engram_init "$dir"
-
-  # Migration should auto-enable git tracking
-  assert_file_exists "config created by migration" "$dir/config"
-  local config
-  config=$(cat "$dir/config")
-  assert_contains "config has git_tracking" "$config" "git_tracking=true"
-
-  local gitignore
-  gitignore=$(cat "$dir/.gitignore")
-  assert_contains "gitignore has index.db" "$gitignore" "index.db"
-  assert_contains "gitignore has brief.md" "$gitignore" "brief.md"
-  assert_contains "gitignore has _private/" "$gitignore" "_private/"
-}
-
-test_migrate_signals_to_decisions() {
-  echo "test_migrate_signals_to_decisions:"
-  local dir="$TEST_DIR/test-migrate/.engram"
-
-  source "$LIB"
-
-  # Create old-style layout manually (before engram_init runs migration)
-  mkdir -p "$dir/signals"
-  mkdir -p "$dir/_private"
-
-  cat > "$dir/signals/decision-use-redis.md" << 'EOF'
----
-type: decision
-date: 2026-03-14
-tags: [infrastructure]
-supersedes: decision-old-cache
-links: [related:decision-redis-perf]
----
-
-# Use Redis for caching
-
-Already in our stack for session storage and pub/sub needs.
-EOF
-
-  cat > "$dir/_private/decision-secret-deal.md" << 'EOF'
----
-type: decision
-date: 2026-03-14
-tags: [business]
----
-
-# Secret deal
-
-Private info about a deal with a major vendor partner.
-EOF
-
-  # Run init — should trigger migration
-  engram_init "$dir"
-
-  # Old dir should be gone, new dir should exist
-  assert_dir_exists "decisions dir exists" "$dir/decisions"
-
-  # Files should have decision- prefix stripped
-  assert_file_exists "public file renamed" "$dir/decisions/use-redis.md"
-  assert_file_exists "private file renamed" "$dir/_private/secret-deal.md"
-
-  # Frontmatter should have decision- prefix stripped from supersedes/links
-  local content
-  content=$(cat "$dir/decisions/use-redis.md")
-  assert_contains "supersedes stripped" "$content" "supersedes: old-cache"
-  assert_not_contains "supersedes no decision- prefix" "$content" "supersedes: decision-"
-  assert_contains "links stripped" "$content" "related:redis-perf"
-  assert_not_contains "links no decision- prefix" "$content" "related:decision-"
-
-  # Reindex should work with new paths
-  engram_reindex "$dir"
-  local count
-  count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals;")
-  assert_eq "migrated signals indexed" "$count" "2"
-}
-
 test_write_decision() {
   echo "test_write_decision:"
   local dir="$TEST_DIR/test-write-decision/.engram"
@@ -2256,6 +2171,50 @@ test_ingest_bodyless_commit_invalid() {
   cd "$SCRIPT_DIR"
 }
 
+# ── Resync pipeline test ──────────────────────────────────────────────
+
+test_resync() {
+  echo "test_resync:"
+  local dir="$TEST_DIR/test-resync/.engram"
+
+  # Use empty plans dir so ingest_plans doesn't pick up stray files
+  local saved_plans="$ENGRAM_PLANS_DIR"
+  export ENGRAM_PLANS_DIR="$TEST_DIR/test-resync/empty-plans"
+  mkdir -p "$ENGRAM_PLANS_DIR"
+
+  source "$LIB"
+  engram_init "$dir"
+
+  cat > "$dir/decisions/resync-test.md" << 'EOF'
+---
+type: decision
+date: 2026-03-17
+tags: [testing]
+---
+
+# Test resync pipeline
+
+Verify that engram_resync runs ingest, reindex, and brief in one call.
+EOF
+
+  engram_resync "$dir"
+
+  # index.db should exist and contain the signal
+  assert_file_exists "index.db exists after resync" "$dir/index.db"
+
+  local count
+  count=$(sqlite3 "$dir/index.db" "SELECT COUNT(*) FROM signals WHERE type='decision';" 2>/dev/null)
+  assert_eq "signal indexed after resync" "$count" "1"
+
+  # brief.md should exist and contain the decision
+  assert_file_exists "brief.md exists after resync" "$dir/brief.md"
+  local brief
+  brief=$(cat "$dir/brief.md")
+  assert_contains "brief has decision" "$brief" "Test resync pipeline"
+
+  export ENGRAM_PLANS_DIR="$saved_plans"
+}
+
 # ── Git opt-in tests ─────────────────────────────────────────────────
 
 test_git_tracking_config() {
@@ -2329,23 +2288,6 @@ test_init_gitignore_with_git_tracking() {
   assert_contains "gitignore has config" "$gitignore" "config"
 }
 
-test_init_migration_auto_enables_git() {
-  echo "test_init_migration_auto_enables_git:"
-  local dir="$TEST_DIR/test-migration-auto/.engram"
-
-  mkdir -p "$dir"
-  # Simulate existing user: has .gitignore but no config
-  printf 'index.db\nbrief.md\n_private/\n' > "$dir/.gitignore"
-
-  source "$LIB"
-  engram_init "$dir"
-
-  assert_file_exists "config created" "$dir/config"
-  local config
-  config=$(cat "$dir/config")
-  assert_contains "git tracking auto-enabled" "$config" "git_tracking=true"
-}
-
 test_ingest_noop_without_git_tracking() {
   echo "test_ingest_noop_without_git_tracking:"
   local repo_dir="$TEST_DIR/test-ingest-noop-repo"
@@ -2376,10 +2318,6 @@ echo ""
 test_init
 echo ""
 test_init_private_dirs
-echo ""
-test_init_upgrade_gitignore
-echo ""
-test_migrate_signals_to_decisions
 echo ""
 test_write_decision
 echo ""
@@ -2497,9 +2435,9 @@ test_init_no_gitignore_by_default
 echo ""
 test_init_gitignore_with_git_tracking
 echo ""
-test_init_migration_auto_enables_git
-echo ""
 test_ingest_noop_without_git_tracking
+echo ""
+test_resync
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

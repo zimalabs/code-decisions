@@ -27,56 +27,13 @@ _git_tracking_enabled() {
   [ -f "$dir/config" ] && grep -qx 'git_tracking=true' "$dir/config"
 }
 
-# ── Migration ─────────────────────────────────────────────────────────
-
-_migrate_signals_to_decisions() {
-  local dir="$1"
-
-  # Migrate signals/ → decisions/ if old layout exists
-  if [ -d "$dir/signals" ] && [ ! -d "$dir/decisions" ]; then
-    mv "$dir/signals" "$dir/decisions"
-  fi
-
-  # Strip decision- prefix from filenames in decisions/ and _private/
-  local target_dir
-  for target_dir in "$dir/decisions" "$dir/_private"; do
-    [ -d "$target_dir" ] || continue
-    for f in "$target_dir"/decision-*.md; do
-      [ -f "$f" ] || continue
-      local base
-      base=$(basename "$f")
-      local new_name="${base#decision-}"
-      [ "$base" = "$new_name" ] && continue
-      mv "$f" "$target_dir/$new_name"
-    done
-  done
-
-  # Rewrite supersedes: and links: frontmatter to strip decision- prefix
-  local target_dir2
-  for target_dir2 in "$dir/decisions" "$dir/_private"; do
-    [ -d "$target_dir2" ] || continue
-    for f in "$target_dir2"/*.md; do
-      [ -f "$f" ] || continue
-      if grep -qE '^(supersedes|links):.*decision-' "$f" 2>/dev/null; then
-        sed 's/\(supersedes: *\)decision-/\1/g; s/\(related:\)decision-/\1/g; s/\(blocks:\)decision-/\1/g; s/\(blocked-by:\)decision-/\1/g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-      fi
-    done
-  done
-}
-
 # ── Init ──────────────────────────────────────────────────────────────
 
 engram_init() {
   local dir="$1"
   _check_fts5
-  _migrate_signals_to_decisions "$dir"
   mkdir -p "$dir"/decisions
   mkdir -p "$dir"/_private
-
-  # Migration: existing .gitignore without config → auto-enable git tracking
-  if [ -f "$dir/.gitignore" ] && [ ! -f "$dir/config" ]; then
-    echo "git_tracking=true" > "$dir/config"
-  fi
 
   # Only manage .gitignore when git tracking is enabled
   if _git_tracking_enabled "$dir"; then
@@ -819,6 +776,16 @@ engram_tag_summary() {
 
   [ -z "$parts" ] && return 0
   printf 'Top topics: %s' "$parts"
+}
+
+# ── Full sync pipeline ─────────────────────────────────────────────
+
+engram_resync() {
+  local dir="$1"
+  engram_ingest_commits "$dir"
+  engram_ingest_plans "$dir"
+  engram_reindex "$dir"
+  engram_brief "$dir"
 }
 
 # ── Uncommitted signal summary ─────────────────────────────────────

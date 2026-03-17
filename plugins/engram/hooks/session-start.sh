@@ -11,11 +11,8 @@ ENGRAM_DIR=".engram"
 # Always init — idempotent, ensures new dirs exist on old installs
 engram_init "$ENGRAM_DIR"
 
-# ALWAYS re-ingest — catches commits from any source (VS Code, terminal, CI, other devs)
-engram_ingest_commits "$ENGRAM_DIR"
-engram_ingest_plans "$ENGRAM_DIR"
-engram_reindex "$ENGRAM_DIR"
-engram_brief "$ENGRAM_DIR"
+# ALWAYS re-sync — catches commits from any source (VS Code, terminal, CI, other devs)
+engram_resync "$ENGRAM_DIR"
 
 # Gather stats for intro banner
 if [ -f "$ENGRAM_DIR/index.db" ]; then
