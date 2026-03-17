@@ -1,17 +1,14 @@
 """Policy definitions — one Policy per hook behavior, ported from shell scripts."""
 from __future__ import annotations
 
-import os
 import re
 import sqlite3
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from ._commits import engram_path_to_keywords
 from ._constants import _NOISE_WORDS
-from ._validate import _validate_content_stdin
 from .policy import Policy, PolicyLevel, PolicyResult, SessionState
 from .store import EngramStore
 
@@ -68,7 +65,7 @@ def _extract_command(data: dict[str, Any]) -> str:
     # tool_input.command for Bash tool
     ti = data.get("tool_input", {})
     if isinstance(ti, dict):
-        return ti.get("command", "")
+        return ti.get("command", "")  # type: ignore[no-any-return]
     return ""
 
 
@@ -76,7 +73,7 @@ def _extract_file_path(data: dict[str, Any]) -> str:
     """Extract file_path from hook input."""
     ti = data.get("tool_input", {})
     if isinstance(ti, dict):
-        return ti.get("file_path", "")
+        return ti.get("file_path", "")  # type: ignore[no-any-return]
     return ""
 
 
@@ -134,7 +131,10 @@ def _delete_guard_condition(data: dict[str, Any], state: SessionState) -> Policy
     if re.search(r"rm\b.*\.engram/decisions/", cmd) or re.search(r"rm\b.*\.engram/_private/decisions/", cmd):
         return PolicyResult(
             matched=True, decision="block",
-            reason="Signals are append-only \u2014 do not delete .engram/ decision files. Write a new signal with status: withdrawn instead.",
+            reason=(
+                "Signals are append-only \u2014 do not delete .engram/ decision files. "
+                "Write a new signal with status: withdrawn instead."
+            ),
         )
 
     # rm -rf or rm -r targeting .engram
@@ -148,7 +148,10 @@ def _delete_guard_condition(data: dict[str, Any], state: SessionState) -> Policy
     if re.search(r"git checkout.*--.*\.engram/(decisions|_private)/", cmd):
         return PolicyResult(
             matched=True, decision="block",
-            reason="Do not revert .engram/ signal files. Signals are append-only \u2014 write a new signal with status: withdrawn instead.",
+            reason=(
+                "Do not revert .engram/ signal files. Signals are append-only \u2014 "
+                "write a new signal with status: withdrawn instead."
+            ),
         )
 
     # git restore .engram/decisions/
@@ -179,7 +182,10 @@ def _edit_guard_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     if not new_string:
         return PolicyResult(
             matched=True, decision="block",
-            reason="Signals are append-only \u2014 do not delete content from .engram/ decision files. To retract a decision, set status: withdrawn in frontmatter.",
+            reason=(
+                "Signals are append-only \u2014 do not delete content from .engram/ decision files. "
+                "To retract a decision, set status: withdrawn in frontmatter."
+            ),
         )
 
     return None
@@ -501,7 +507,8 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
         matched=True, ok=True,
         reason=(
             f"Session reflection: you edited {len(edited)} file(s): {files_summary}. "
-            "Which of these changes were significant decisions (architecture, new features, refactors, dependency changes)? "
+            "Which of these changes were significant decisions "
+            "(architecture, new features, refactors, dependency changes)? "
             "Write signals for those with /engram:capture. Skip if all changes were routine."
         ),
     )

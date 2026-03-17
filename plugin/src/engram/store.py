@@ -6,13 +6,13 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from ._constants import StrPath
 from ._commits import _is_decision_commit
+from ._constants import StrPath
 from ._frontmatter import _format_toml_frontmatter
-from ._helpers import _check_fts5, _connect, _parse_links, _slug, _slugify
+from ._helpers import _check_fts5, _connect, _slug, _slugify
 from .signal import Signal
 
 
@@ -145,16 +145,18 @@ class EngramStore:
         created_at = sig.created_at
         if not created_at:
             try:
-                created_at = datetime.fromtimestamp(p.stat().st_birthtime, tz=timezone.utc).isoformat()
+                created_at = datetime.fromtimestamp(p.stat().st_birthtime, tz=UTC).isoformat()
             except AttributeError:
-                created_at = datetime.fromtimestamp(p.stat().st_ctime, tz=timezone.utc).isoformat()
+                created_at = datetime.fromtimestamp(p.stat().st_ctime, tz=UTC).isoformat()
         elif not isinstance(created_at, str):
             created_at = str(created_at)
-        updated_at = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).isoformat()
+        updated_at = datetime.fromtimestamp(p.stat().st_mtime, tz=UTC).isoformat()
 
         with self.connect() as conn:
             conn.execute(
-                "INSERT INTO signals (type, title, content, tags, source, date, file, private, excerpt, slug, status, created_at, updated_at) "
+                "INSERT INTO signals "
+                "(type, title, content, tags, source, date, file, private, "
+                "excerpt, slug, status, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (sig.sig_type, sig.title, sig.content, sig.tags, sig.source, sig.date,
                  str(filepath), private, sig.excerpt, slug, sig.status, created_at, updated_at),
@@ -416,7 +418,7 @@ class EngramStore:
             filepath.write_text(signal)
 
         # Update last_plan_ingest timestamp
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self.meta_set("last_plan_ingest", now)
 
     def brief(self) -> None:
@@ -684,7 +686,8 @@ class EngramStore:
                 "SELECT s.slug, s.title, "
                 "CASE WHEN s.tags = '[]' OR s.tags = '' THEN 'tags,' ELSE '' END "
                 "|| CASE WHEN (s.source IS NULL OR s.source = '') "
-                "AND s.content NOT LIKE '%## Rationale%' AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
+                "AND s.content NOT LIKE '%## Rationale%' "
+                "AND s.content NOT LIKE '%## Alternatives%' THEN 'sections,' ELSE '' END "
                 "|| CASE WHEN l.source_file IS NULL AND l2.target_file IS NULL THEN 'links,' ELSE '' END "
                 "AS gap_types "
                 "FROM signals s "
@@ -725,7 +728,7 @@ class EngramStore:
                 ["git", "status", "--porcelain", str(self.decisions_dir), str(self.private_dir)],
                 capture_output=True, text=True, errors="replace",
             )
-            lines = [l for l in result.stdout.splitlines() if l.strip()]
+            lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
         except (OSError, subprocess.SubprocessError):
             return ""
 

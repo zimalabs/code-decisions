@@ -8,7 +8,10 @@ from pathlib import Path
 _DECISION_PREFIXES = re.compile(r"^(feat|feat!|breaking|refactor|perf)[:(]")
 
 # Prefixes that are never decisions
-_SKIP_PREFIXES = re.compile(r"^(fix|docs|test|tests|chore|ci|style|build|typo|wip|merge|remove|delete|clean|rename|move|bump|update)[:(]")
+_SKIP_PREFIXES = re.compile(
+    r"^(fix|docs|test|tests|chore|ci|style|build|typo|wip"
+    r"|merge|remove|delete|clean|rename|move|bump|update)[:(]"
+)
 
 # Commit message patterns that indicate architectural/dependency decisions
 _DECISION_PATTERNS = re.compile(
@@ -28,7 +31,10 @@ _SKIP_PATTERNS = re.compile(
 )
 
 # Noise words for path_to_keywords
-_NOISE_WORDS = frozenset("src lib app index test spec the and is of to in for a an".split())
+_NOISE_WORDS = frozenset([
+    "src", "lib", "app", "index", "test", "spec",
+    "the", "and", "is", "of", "to", "in", "for", "a", "an",
+])
 
 # ── Type aliases ─────────────────────────────────────────────────────
 

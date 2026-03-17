@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 
 from ._commits import engram_path_to_keywords
 from ._validate import _validate_content_stdin
@@ -105,7 +106,7 @@ def _cmd_policy() -> None:
         print(result)
 
 
-_COMMANDS: dict[str, callable] = {
+_COMMANDS: dict[str, Callable[[], object]] = {
     "init": _cmd_init,
     "resync": lambda: EngramStore(_arg(2)).resync(),
     "reindex": lambda: EngramStore(_arg(2)).reindex(),

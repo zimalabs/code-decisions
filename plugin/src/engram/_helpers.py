@@ -29,7 +29,10 @@ def _check_fts5() -> bool:
     except sqlite3.OperationalError:
         print("engram: SQLite FTS5 module not available.", file=sys.stderr)
         print("engram: Install SQLite with FTS5 support:", file=sys.stderr)
-        print('engram:   macOS:  brew install sqlite && export PATH="$(brew --prefix sqlite)/bin:$PATH"', file=sys.stderr)
+        print(
+            'engram:   macOS:  brew install sqlite && export PATH="$(brew --prefix sqlite)/bin:$PATH"',
+            file=sys.stderr,
+        )
         print("engram:   Ubuntu: sudo apt-get install -y libsqlite3-0", file=sys.stderr)
         print("engram:   Alpine: apk add sqlite", file=sys.stderr)
         return False

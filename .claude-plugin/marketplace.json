@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "engram",
-      "source": "./plugins/engram",
+      "source": "./plugin",
       "description": "Structured decision memory for AI agents. Auto-capture, search, and evolution tracking. Zero-config, privacy-first.",
       "version": "0.3.0",
       "license": "MIT",

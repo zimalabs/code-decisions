@@ -1,14 +1,15 @@
 """Policy engine — evaluates registered policies for hook events."""
 from __future__ import annotations
 
+import dataclasses
 import enum
 import json
 import os
-import dataclasses
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 class PolicyLevel(enum.IntEnum):
@@ -96,7 +97,7 @@ class SessionState:
         p = self._activity_path()
         if p.is_file():
             try:
-                return json.loads(p.read_text())
+                return json.loads(p.read_text())  # type: ignore[no-any-return]
             except (json.JSONDecodeError, OSError):
                 pass
         return {"edits": []}

@@ -26,5 +26,8 @@ jobs:
           brew install shellcheck sqlite
           echo "$(brew --prefix sqlite)/bin" >> "$GITHUB_PATH"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
       - name: Run checks
         run: make check

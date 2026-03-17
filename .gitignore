@@ -1,7 +1,26 @@
+# SQLite
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+
+# Dev tools
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# OS / Editor
 .DS_Store
 .claude/settings.json
 .claude/settings.local.json

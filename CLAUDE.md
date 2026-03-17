@@ -7,31 +7,35 @@ Claude Code plugin that gives agents persistent decision memory. Decisions are m
 ## Commands
 
 ```sh
-make check    # shellcheck + tests (run before every push)
-make lint     # shellcheck only
-make test     # test suite only
+uv sync           # install dev deps (first time only)
+make check        # ruff + mypy + shellcheck + pytest (run before every push)
+make lint         # shellcheck + ruff + mypy
+make test         # pytest only
+make dev          # symlink plugin into Claude Code cache
 ```
 
 ## File Layout
 
 ```
 .claude-plugin/
-  marketplace.json        # Marketplace manifest (points to plugins/engram)
-plugins/engram/
+  marketplace.json        # Marketplace manifest (source: "./plugin")
+plugin/                   # Installable plugin
   .claude-plugin/
     plugin.json           # Plugin manifest
-  engram/                 # Core library package
-    __init__.py           # ENGRAM_LIB_DIR, ENGRAM_SCHEMA_FILE, re-exports
-    __main__.py           # CLI dispatch (python3 -m engram)
-    _constants.py         # Regex patterns, NOISE_WORDS, StrPath alias
-    _helpers.py           # _connect, _check_fts5, _slugify, _slug, etc.
-    _frontmatter.py       # _split_frontmatter, _format_toml_frontmatter
-    _commits.py           # _is_decision_commit, engram_path_to_keywords
-    _validate.py          # _validate_content_stdin
-    _policy_defs.py       # 15 policy definitions (ALL_POLICIES)
-    policy.py             # PolicyEngine, Policy, PolicyLevel, PolicyResult, SessionState
-    signal.py             # Signal dataclass
-    store.py              # EngramStore class
+  src/
+    engram/               # Core library package (stdlib only)
+      __init__.py         # ENGRAM_LIB_DIR, ENGRAM_SCHEMA_FILE, re-exports
+      __main__.py         # CLI dispatch (python3 -m engram)
+      py.typed            # mypy marker
+      _constants.py       # Regex patterns, NOISE_WORDS, StrPath alias
+      _helpers.py         # _connect, _check_fts5, _slugify, _slug, etc.
+      _frontmatter.py     # _split_frontmatter, _format_toml_frontmatter
+      _commits.py         # _is_decision_commit, engram_path_to_keywords
+      _validate.py        # _validate_content_stdin
+      _policy_defs.py     # 15 policy definitions (ALL_POLICIES)
+      policy.py           # PolicyEngine, Policy, PolicyLevel, PolicyResult, SessionState
+      signal.py           # Signal dataclass
+      store.py            # EngramStore class
   schemas/
     schema.sql            # SQLite schema (signals table + FTS5 + triggers)
     README.md             # Schema overview + shared field/link type reference
@@ -44,10 +48,10 @@ plugins/engram/
     query/SKILL.md        # SQL queries against index.db
     resync/SKILL.md       # Full sync: ingest + reindex + brief
     policies/SKILL.md     # List active policies with levels and events
-  tests/
-    test_engram.py        # Test suite — store, signals, hooks (Python)
-    test_policy.py        # Test suite — policy engine + all 15 policies
-    run_tests.sh          # Test runner wrapper (legacy)
+tests/                    # At repo root — NOT in plugin
+  test_engram.py          # Test suite — store, signals, hooks (pytest)
+  test_policy.py          # Test suite — policy engine + all 15 policies (pytest)
+pyproject.toml            # Dev deps (pytest, ruff, mypy) + tool config
 ```
 
 ## Key Concepts
@@ -74,6 +78,7 @@ resync → ingest_commits → ingest_plans → reindex → brief
 3. **Directory = privacy.** `_private/` path means excluded from brief and context injection. No config flags.
 4. **No CLI.** Capture via Write tool, query via `/engram:query` skill, everything else via hooks.
 5. **Pure methods on EngramStore.** No side effects at import time. Store methods operate on `self.root`; module-level helpers are pure functions.
+6. **Plugin is stdlib only.** Dev tooling (pytest, ruff, mypy) lives in `pyproject.toml` at repo root. The `plugin/` directory has zero external dependencies.
 
 ## Schema
 
@@ -91,23 +96,21 @@ Link rel_types: `supersedes`, `related`
 
 ## Adding a New Function
 
-1. Add the function to the appropriate module in `plugins/engram/engram/`
-2. Add tests to `plugins/engram/tests/test_engram.py`
+1. Add the function to the appropriate module in `plugin/src/engram/`
+2. Add tests to `tests/test_engram.py`
 3. Wire into hooks via a new policy in `_policy_defs.py` if it should run at session events
 4. Run `make check`
 
 ## Adding a New Policy
 
-1. Write a condition function in `plugins/engram/engram/_policy_defs.py`
+1. Write a condition function in `plugin/src/engram/_policy_defs.py`
 2. Add a `Policy(...)` instance to `ALL_POLICIES` with name, level, events, matchers
-3. Add tests to `plugins/engram/tests/test_policy.py`
+3. Add tests to `tests/test_policy.py`
 4. Run `make check` — no hooks.json changes needed (dispatch.sh routes all events)
 
 ## Testing
 
-Tests use temp directories and real SQLite — no mocks, no pytest. Each test function creates its own `.engram/` in a temp dir. Git-related tests create throwaway repos via `_create_test_repo()`.
-
-Test helpers: `assert_eq`, `assert_contains`, `assert_not_contains`, `assert_file_exists`, `assert_dir_exists`, `assert_file_count`.
+Tests use pytest with `tmp_path` fixtures and real SQLite — no mocks. Each test function creates its own `.engram/` in a temp dir. Git-related tests create throwaway repos via `_create_test_repo()`.
 
 ## Dogfooding: Record Your Decisions
 
@@ -139,4 +142,5 @@ What counts as significant: architecture changes, new features, refactors, depen
 - Frontmatter parsing: TOML via `tomllib` (stdlib 3.11+), `+++` delimiters
 - Hook timeout: 15 seconds (set in `hooks.json`)
 - Filenames: `{slug}.md`, slug via `_slugify()`
-- Stdlib only: no pytest, no external dependencies (tomllib is stdlib since 3.11)
+- Plugin: stdlib only (no external dependencies)
+- Dev tools: `uv sync` to install pytest, ruff, mypy
