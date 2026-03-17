@@ -10,7 +10,7 @@ Write a decision signal file directly to the `.engram/` directory using the Writ
 ## Execution Steps
 
 1. **Read the schema**: `${CLAUDE_PLUGIN_ROOT}/schemas/decision.md`
-2. **Determine privacy**: sensitive content → `.engram/_private/`, everything else → `.engram/decisions/`
+2. **Determine privacy**: sensitive content → `.engram/_private/decisions/`, everything else → `.engram/decisions/`
 3. **Generate filename**: `{slug}.md`
 4. **Write the file** using the Write tool, following the template and body sections from the schema
 5. **Confirm** to the user what was captured
@@ -31,7 +31,7 @@ Signals have two visibility tiers based on directory path:
 
 - **Public** (default): `.engram/decisions/`
   - Included in brief, visible in context
-- **Private**: `.engram/_private/`
+- **Private**: `.engram/_private/decisions/`
   - Excluded from brief and context
 
 Use private for:

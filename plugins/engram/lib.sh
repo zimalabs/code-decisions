@@ -33,7 +33,7 @@ engram_init() {
   local dir="$1"
   _check_fts5
   mkdir -p "$dir"/decisions
-  mkdir -p "$dir"/_private
+  mkdir -p "$dir"/_private/decisions
 
   # Only manage .gitignore when git tracking is enabled
   if _git_tracking_enabled "$dir"; then
@@ -283,7 +283,7 @@ engram_ingest_commits() {
     if grep -rql "source: git:$hash" "$dir/decisions/" 2>/dev/null; then
       continue
     fi
-    if grep -rql "source: git:$hash" "$dir/_private/" 2>/dev/null; then
+    if grep -rql "source: git:$hash" "$dir/_private/decisions/" 2>/dev/null; then
       continue
     fi
 
@@ -299,7 +299,7 @@ engram_ingest_commits() {
     if [ -f "$filepath" ]; then
       continue
     fi
-    if [ -f "$dir/_private/${slug}.md" ]; then
+    if [ -f "$dir/_private/decisions/${slug}.md" ]; then
       continue
     fi
 
@@ -476,7 +476,7 @@ engram_reindex() {
   done
 
   # Index private signals
-  for f in "$dir/_private"/*.md; do
+  for f in "$dir/_private/decisions"/*.md; do
     [ -f "$f" ] || continue
     _index_file "$dir" "$f" 1
   done
@@ -831,7 +831,7 @@ engram_uncommitted_summary() {
   git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
 
   local uncommitted
-  uncommitted=$(git status --porcelain "$dir/decisions" "$dir/_private" 2>/dev/null | grep -v '^$')
+  uncommitted=$(git status --porcelain "$dir/decisions" "$dir/_private/decisions" 2>/dev/null | grep -v '^$')
   [ -z "$uncommitted" ] && return 0
 
   local count

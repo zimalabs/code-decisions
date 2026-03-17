@@ -31,7 +31,7 @@ claude plugin install engram@zimalabs --scope project
 ### First session (greenfield or brownfield)
 
 SessionStart hook fires:
-1. Creates `.engram/decisions/` and `.engram/_private/` if missing
+1. Creates `.engram/decisions/` and `.engram/_private/decisions/` if missing
 2. Ingests any Claude plan files with `## Context` sections
 3. If git tracking is enabled: ingests last 50 git commits as decision signals (brownfield bootstrap)
 4. Builds `index.db` (derived SQLite index)
@@ -266,12 +266,12 @@ With git tracking enabled:
 
 ## Private Signals
 
-For sensitive content that should be excluded from brief and context, write to `.engram/_private/`:
+For sensitive content that should be excluded from brief and context, write to `.engram/_private/decisions/`:
 
 ```
-.engram/_private/competitor-deal.md
-.engram/_private/customer-churn-data.md
-.engram/_private/personnel-concern.md
+.engram/_private/decisions/competitor-deal.md
+.engram/_private/decisions/customer-churn-data.md
+.engram/_private/decisions/personnel-concern.md
 ```
 
 Private signals are:
@@ -292,7 +292,8 @@ Use private for: messaging content, CRM data, competitive intel, personnel decis
 │   ├── jwt-auth.md
 │   └── redis-cluster.md
 ├── _private/                         # excluded from brief
-│   └── competitor-deal.md
+│   └── decisions/
+│       └── competitor-deal.md
 ├── config                            # optional (git_tracking=true)
 ├── brief.md                          # derived
 └── index.db                          # derived

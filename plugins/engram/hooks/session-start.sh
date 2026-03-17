@@ -61,7 +61,7 @@ When you make a significant decision, write a signal file:
   Write .engram/decisions/{slug}.md  (use the decision schema)
 
 For PRIVATE signals (sensitive, excluded from brief and context):
-  Write .engram/_private/{slug}.md
+  Write .engram/_private/decisions/{slug}.md
 
 To query past signals:
   @engram:query <question>"

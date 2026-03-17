@@ -99,7 +99,7 @@ meta: key, value
 ```
 
 Type: `decision`
-Privacy: `private=0` (public, in decisions/), `private=1` (private, in _private/)
+Privacy: `private=0` (public, in decisions/), `private=1` (private, in _private/decisions/)
 Link rel_types: `supersedes`, `related`, `blocks`, `blocked-by`
 
 For signal file schema (frontmatter fields, body sections, link types), see `${CLAUDE_PLUGIN_ROOT}/schemas/`.

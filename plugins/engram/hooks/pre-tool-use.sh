@@ -13,7 +13,7 @@ file_path=$(printf '%s' "$input" | sed -n 's/.*"file_path" *: *"\([^"]*\)".*/\1/
 
 # Only validate .engram/decisions/ and .engram/_private/ files
 case "$file_path" in
-  *.engram/decisions/*.md|*.engram/_private/*.md) ;;
+  *.engram/decisions/*.md|*.engram/_private/decisions/*.md) ;;
   *) printf '{}\n'; exit 0 ;;
 esac
 

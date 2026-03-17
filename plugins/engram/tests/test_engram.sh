@@ -151,7 +151,7 @@ test_init() {
   engram_init "$dir"
 
   assert_dir_exists "decisions dir" "$dir/decisions"
-  assert_dir_exists "_private dir" "$dir/_private"
+  assert_dir_exists "_private dir" "$dir/_private/decisions"
   assert_file_exists "index.db" "$dir/index.db"
 
   # No .gitignore by default (git tracking is opt-in)
@@ -173,7 +173,7 @@ test_init_private_dirs() {
   source "$LIB"
   engram_init "$dir"
 
-  assert_dir_exists "_private dir" "$dir/_private"
+  assert_dir_exists "_private dir" "$dir/_private/decisions"
 }
 
 test_write_decision() {
@@ -410,7 +410,7 @@ test_ingest_private_signal_suppresses() {
   _enable_git_tracking "$dir"
 
   # Pre-create a private signal with the same slug
-  cat > "$dir/_private/feat-switch-to-redis-for-caching.md" << 'EOF'
+  cat > "$dir/_private/decisions/feat-switch-to-redis-for-caching.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-16
@@ -811,7 +811,7 @@ test_private_signal_indexed() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/_private/secret-deal.md" << 'EOF'
+  cat > "$dir/_private/decisions/secret-deal.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -851,7 +851,7 @@ Visible to everyone in the team and included in the brief.
 EOF
 
   # Write a private signal
-  cat > "$dir/_private/private-deal.md" << 'EOF'
+  cat > "$dir/_private/decisions/private-deal.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -880,7 +880,7 @@ test_private_queryable() {
   source "$LIB"
   engram_init "$dir"
 
-  cat > "$dir/_private/competitor-intel.md" << 'EOF'
+  cat > "$dir/_private/decisions/competitor-intel.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14
@@ -1022,7 +1022,7 @@ test_session_end_output() {
   engram_reindex "$dir"
   engram_brief "$dir"
   # Add .gitkeep to empty dirs so git tracks them
-  touch "$dir/decisions/.gitkeep" "$dir/_private/.gitkeep"
+  touch "$dir/decisions/.gitkeep" "$dir/_private/decisions/.gitkeep"
   git add .engram/ && git commit -q -m "engram: init"
 
   # Run session-end hook with CLAUDE_PLUGIN_ROOT set
@@ -1498,7 +1498,7 @@ date: 2026-03-15
 Token-based auth for mobile clients.
 EOF
 
-  cat > "$dir/_private/secret.md" << 'EOF'
+  cat > "$dir/_private/decisions/secret.md" << 'EOF'
 ---
 type: decision
 date: 2026-03-14

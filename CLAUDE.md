@@ -41,7 +41,7 @@ plugins/engram/
 ## Key Concepts
 
 - **Signals** = decision markdown files in `.engram/decisions/`
-- **Private signals** = same format, in `.engram/_private/` (excluded from brief and context)
+- **Private signals** = same format, in `.engram/_private/decisions/` (excluded from brief and context)
 - **index.db** = derived SQLite database, rebuilt from files every session. Safe to delete.
 - **brief.md** = generated summary injected into agent context. Public signals only.
 

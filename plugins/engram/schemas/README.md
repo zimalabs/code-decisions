@@ -32,7 +32,7 @@ All decision signals support these fields:
 | Directory | Git | Brief | Queryable |
 |---|---|---|---|
 | `.engram/decisions/` | tracked | included | yes |
-| `.engram/_private/` | ignored | excluded | yes |
+| `.engram/_private/decisions/` | ignored | excluded | yes |
 
 The directory path determines privacy. Schema is identical in both directories.
 

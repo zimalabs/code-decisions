@@ -25,7 +25,7 @@ If no output, respond: "All signals are complete." and stop.
 
 For each incomplete signal:
 
-1. **Read the signal file** from `.engram/decisions/{file_stem}.md` or `.engram/_private/{file_stem}.md`
+1. **Read the signal file** from `.engram/decisions/{file_stem}.md` or `.engram/_private/decisions/{file_stem}.md`
 2. **Check the `source:` field** in frontmatter to classify:
    - **No source field** (agent-written): full enrichment — tags, `## Rationale`, `## Alternatives`, links
    - **`source: git:*`** or **`source: plan:*`** (auto-ingested): tags and links only — do NOT add rationale or alternatives (agent has no special context for these)
