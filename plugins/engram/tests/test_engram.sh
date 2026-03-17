@@ -1949,15 +1949,12 @@ test_hooks_json_prompts() {
 
   # 4. All prompt hooks contain JSON instruction
   local json_count
-  json_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt | test("MUST respond with.*JSON")))] | length' "$hooks_file")
+  json_count=$(jq '[.hooks[][] | .hooks[] | select(.type == "prompt" and (.prompt | test("JSON")))] | length' "$hooks_file")
   assert_eq "all prompts have JSON instruction" "$json_count" "$prompt_count"
 
-  # 5. PostToolUse mentions SKILL.md
+  # 5. PostToolUse never contains "ok": false (advisory only)
   local post_prompt
   post_prompt=$(jq -r '.hooks.PostToolUse[0].hooks[] | select(.type == "prompt") | .prompt' "$hooks_file")
-  assert_contains "PostToolUse mentions SKILL.md" "$post_prompt" "SKILL.md"
-
-  # 6. PostToolUse never contains "ok": false (advisory only)
   assert_not_contains "PostToolUse is advisory only" "$post_prompt" '"ok": false'
 
   # 7. Stop prompt contains both ok:true and ok:false

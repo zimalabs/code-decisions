@@ -2,6 +2,9 @@
 # Auto-init, ingest, index, brief, inject context at session start.
 set -euo pipefail
 
+# Always output valid JSON, even on unexpected errors
+trap 'printf "{}\n"; exit 0' ERR
+
 source "${CLAUDE_PLUGIN_ROOT}/lib.sh"
 ENGRAM_DIR=".engram"
 

@@ -2,6 +2,9 @@
 # PreCompact command hook: regenerate and re-inject brief before context is lost.
 set -euo pipefail
 
+# Always output valid JSON, even on unexpected errors
+trap 'printf "{}\n"; exit 0' ERR
+
 source "${CLAUDE_PLUGIN_ROOT}/lib.sh"
 ENGRAM_DIR=".engram"
 

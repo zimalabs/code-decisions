@@ -2,9 +2,12 @@
 # Ingest new commits, reindex, regenerate brief at session end.
 set -euo pipefail
 
+# Always output valid JSON, even on unexpected errors
+trap 'printf "{}\n"; exit 0' ERR
+
 source "${CLAUDE_PLUGIN_ROOT}/lib.sh"
 ENGRAM_DIR=".engram"
-[ -d "$ENGRAM_DIR" ] || exit 0
+[ -d "$ENGRAM_DIR" ] || { printf '{}\n'; exit 0; }
 
 engram_ingest_commits "$ENGRAM_DIR"
 engram_ingest_plans "$ENGRAM_DIR"
