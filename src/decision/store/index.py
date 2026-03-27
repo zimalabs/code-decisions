@@ -7,7 +7,6 @@ Markdown files remain the source of truth.
 from __future__ import annotations
 
 import dataclasses
-import fcntl
 import json
 import re
 import sqlite3
@@ -19,7 +18,7 @@ from typing import NamedTuple
 
 from ..core.decision import Decision
 from ..utils.constants import BUSY_TIMEOUT_MS, DEFAULT_QUERY_LIMIT, INDEX_FILENAME, PREFIX_WILDCARD_MAX_LEN, StrPath
-from ..utils.helpers import _log
+from ..utils.helpers import _file_lock, _log
 
 _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _schema_cache: str | None = None
@@ -116,13 +115,8 @@ class DecisionIndex:
     @contextmanager
     def _acquire_lock(self) -> Generator[None, None, None]:
         """Acquire an exclusive file lock to serialize index writes."""
-        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._lock_path, "w") as fd:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+        with _file_lock(self._lock_path):
+            yield
 
     @property
     def available(self) -> bool:

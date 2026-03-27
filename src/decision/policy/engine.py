@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-import fcntl
 import hashlib
 import json
 import os
@@ -18,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..utils.constants import NUDGE_BUDGET, WRITE_TOOLS
-from ..utils.helpers import _log
+from ..utils.helpers import _file_lock, _log
 
 if TYPE_CHECKING:
     from ..store import DecisionStore
@@ -183,14 +182,8 @@ class SessionState:
     @contextmanager
     def _acquire_activity_lock(self) -> Generator[None, None, None]:
         """Acquire an exclusive file lock to serialize activity/nudge writes."""
-        lock_path = self._dir / "_activity.lock"
-        self._dir.mkdir(parents=True, exist_ok=True)
-        with open(lock_path, "w") as fd:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+        with _file_lock(self._dir / "_activity.lock"):
+            yield
 
     # ── Activity tracking ─────────────────────────────────────────────
 

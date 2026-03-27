@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +67,29 @@ def _discover_decisions_dir(cwd: str | Path | None = None) -> Path:
     if root is None:
         root = Path(cwd).resolve() if cwd else Path.cwd().resolve()
     return root / ".claude" / "decisions"
+
+
+@contextmanager
+def _file_lock(lock_path: Path) -> Generator[None, None, None]:
+    """Acquire an exclusive file lock, cross-platform (fcntl on Unix, msvcrt on Windows)."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as fd:
+        if os.name == "nt":
+            import msvcrt  # type: ignore[import-not-found]
+
+            msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+            try:
+                yield
+            finally:
+                msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 def _path_to_keywords(path: str) -> str:
