@@ -852,6 +852,21 @@ def test_coverage_git_unavailable(tmp_path):
                     main()
 
 
+def test_coverage_excludes_non_code_files(tmp_path, capsys):
+    """coverage excludes images, LICENSE, Makefile, and other non-code files."""
+    with _with_home(tmp_path):
+        _decisions_dir_for(tmp_path).mkdir(parents=True, exist_ok=True)
+        git_output = "src/app.py\nassets/logo.png\nLICENSE\nMakefile\nstatic/icon.svg\n"
+        with patch("subprocess.run", return_value=subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=git_output, stderr=""
+        )):
+            with patch.object(sys, "argv", ["decision", "coverage", "--json"]):
+                main()
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["total_files"] == 1  # only src/app.py
+
+
 def test_group_by_dir():
     """_group_by_dir groups files by parent directory."""
     from decision.cli import _group_by_dir

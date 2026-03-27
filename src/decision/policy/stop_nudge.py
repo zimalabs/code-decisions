@@ -254,6 +254,9 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     if secondary_msg:
         combined = (combined + " · " + secondary_msg).strip() if combined else secondary_msg
 
+    # Clean up this session's /tmp state dir — all data persisted above
+    state.cleanup()
+
     if combined:
         return PolicyResult(matched=True, system_message=combined)
 

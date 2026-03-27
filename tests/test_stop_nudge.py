@@ -456,3 +456,23 @@ def test_never_surfaced_silent_when_no_affects(tmp_path):
     state = make_session_state("no-affects", store=store)
     result = _check_never_surfaced(state)
     assert result is None
+
+
+# ── session cleanup on stop ──────────────────────────────────────
+
+
+def test_stop_nudge_cleans_up_session_dir(tmp_path):
+    """stop-nudge cleans up the session's /tmp state directory."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _stop_nudge_condition
+
+    state = make_session_state("stop-cleanup", store=store)
+    state.record_edit("src/app.py")
+
+    # Session dir should exist before stop
+    assert state._dir.is_dir()
+
+    _stop_nudge_condition({}, state)
+
+    # Session dir should be removed after stop
+    assert not state._dir.is_dir()

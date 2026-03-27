@@ -221,9 +221,9 @@ def test_infer_affects_root_level_files():
     """infer_affects keeps root-level files as individual paths."""
     from decision.utils.affects import infer_affects
 
-    result = infer_affects(["setup.py", "Makefile"])
+    result = infer_affects(["setup.py", "main.py"])
     assert "setup.py" in result
-    assert "Makefile" in result
+    assert "main.py" in result
 
 
 def test_suggest_affects_from_tags_non_store():

@@ -102,6 +102,27 @@ SKIP_FILE_PATTERNS = (
     ".yml",
     ".toml",
     ".lock",
+    # Images and media
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".webp",
+    # Non-code files
+    "LICENSE",
+    "Makefile",
+    # Asset and vendor directories
+    "/assets/",
+    "/static/",
+    "/public/",
+    "/vendor/",
+    # Fonts
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
 )
 
 # Capture nudge

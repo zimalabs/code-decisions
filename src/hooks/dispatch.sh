@@ -74,9 +74,8 @@ if [[ "$event" == "PostToolUse" ]]; then
     if [[ -n "$_fp" ]]; then
         # BEGIN SKIP_PATTERNS (generated — keep in sync with constants.py, verified by test_skip_patterns_in_sync)
         _skip=false
-        for pat in /memory/ /decisions/ _test. .test. /tests/ /test/ /spec/ tests/ test/ spec/ \
-                   README.md CHANGELOG.md CLAUDE.md MEMORY.md /docs/ /doc/ \
-                   .json .yaml .yml .toml .lock; do
+        for pat in /memory/ /decisions/ _test. .test. /tests/ /test/ /spec/ tests/ test/ spec/ README.md CHANGELOG.md CLAUDE.md MEMORY.md /docs/ /doc/ .json .yaml .yml \
+                   .toml .lock .png .jpg .jpeg .gif .svg .ico .webp LICENSE Makefile /assets/ /static/ /public/ /vendor/ .woff .woff2 .ttf .eot; do
         # END SKIP_PATTERNS
             if [[ "$_fp" == *"$pat"* ]]; then _skip=true; break; fi
         done

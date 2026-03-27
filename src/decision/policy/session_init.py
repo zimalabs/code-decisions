@@ -14,7 +14,7 @@ def _session_init_condition(data: dict[str, Any], state: SessionState) -> Policy
     store.ensure_dir()
 
     # Opportunistically clean up stale session dirs from /tmp
-    SessionState.cleanup_stale()
+    SessionState.cleanup_stale(max_age_seconds=14400)  # 4 hours
 
     count = store.decision_count()
 
