@@ -22,7 +22,7 @@ make dev                       # symlink plugin into Claude Code cache
 
 ## Storage
 
-Decisions live at `.claude/decisions/{slug}.md` in the repo — committed to git and shared with the team. The FTS5 index lives at `~/.claude/projects/{project-key}/.decision/`.
+Decisions live at `.claude/decisions/{slug}.md` in the repo — committed to git and shared with the team. The FTS5 index lives at `~/.claude/projects/{project-key}/.decisions/`.
 
 ## Architecture Rules
 

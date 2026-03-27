@@ -309,11 +309,11 @@ def test_state_dir_real_implementation(tmp_path):
         # Call the real _state_dir by reconstructing it
         from decision.utils.helpers import _project_key
         cwd = tmp_path / "testproj"
-        d = fake_home / ".claude" / "projects" / _project_key(cwd) / ".decision"
+        d = fake_home / ".claude" / "projects" / _project_key(cwd) / ".decisions"
         d.mkdir(parents=True, exist_ok=True)
 
     assert d.exists()
-    assert ".decision" in str(d)
+    assert ".decisions" in str(d)
 
 
 def test_store_list_decisions_skips_malformed(tmp_path):

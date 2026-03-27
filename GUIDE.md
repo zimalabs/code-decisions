@@ -89,5 +89,5 @@ Your decisions stay exactly where they are — markdown files in `.claude/decisi
 To also remove the search index (rebuilds automatically if you reinstall):
 
 ```sh
-rm -rf ~/.claude/projects/*/.decision/
+rm -rf ~/.claude/projects/*/.decisions/
 ```

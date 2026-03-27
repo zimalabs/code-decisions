@@ -50,11 +50,11 @@ def _project_key(cwd: str | Path | None = None) -> str:
 
 
 def _state_dir(cwd: str | Path | None = None) -> Path:
-    """Return the plugin state directory (~/.claude/projects/{key}/.decision/).
+    """Return the plugin state directory (~/.claude/projects/{key}/.decisions/).
 
     Creates the directory if it doesn't exist.
     """
-    d = Path.home() / ".claude" / "projects" / _project_key(cwd) / ".decision"
+    d = Path.home() / ".claude" / "projects" / _project_key(cwd) / ".decisions"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
