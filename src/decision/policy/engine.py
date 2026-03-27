@@ -106,6 +106,11 @@ class SessionState:
             self._session_id_fallback = False
         self._dir = Path(tempfile.gettempdir()) / f"decision-policy-{sid}"
         self._dir.mkdir(parents=True, exist_ok=True)
+        # Restrict to owner-only — session state contains edited file paths
+        try:
+            os.chmod(self._dir, 0o700)
+        except OSError:
+            pass
         self._activity: dict[str, Any] = self._load_activity_from_disk()
         self._start_time = float(int(time.time()))
         self._store: DecisionStore | None = store

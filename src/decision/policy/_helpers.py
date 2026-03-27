@@ -151,4 +151,4 @@ def _is_decision_path(path: str) -> bool:
     from pathlib import PurePosixPath
 
     p = PurePosixPath(path)
-    return p.parent.name == "decisions"
+    return p.parent.name == "decisions" and ".claude" in p.parts

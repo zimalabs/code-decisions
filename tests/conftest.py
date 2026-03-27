@@ -36,7 +36,7 @@ def make_store(tmp_path):
     """Create a fresh decisions dir in a temp dir, return (decisions_dir, store)."""
     import decision
 
-    decisions_dir = tmp_path / "decisions"
+    decisions_dir = tmp_path / ".claude" / "decisions"
     store = decision.DecisionStore(str(decisions_dir), db_dir=str(tmp_path / "db"))
     store.ensure_dir()
     return decisions_dir, store

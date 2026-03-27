@@ -11,8 +11,8 @@ def test_edit_validation_warns_on_malformed(tmp_path):
     from decision.policy.defs import _edit_validation_condition
 
     # Write a malformed decision file in a decisions/ directory
-    decisions_dir = tmp_path / "decisions"
-    decisions_dir.mkdir(exist_ok=True)
+    decisions_dir = tmp_path / ".claude" / "decisions"
+    decisions_dir.mkdir(parents=True, exist_ok=True)
     (decisions_dir / "broken.md").write_text("Still no frontmatter here\nJust text\n")
 
     state = make_session_state("ev-malformed")
@@ -33,8 +33,8 @@ def test_edit_validation_silent_on_valid(tmp_path):
     """edit-validation returns None when the decision file is still valid."""
     from decision.policy.defs import _edit_validation_condition
 
-    dec_dir = tmp_path / "decisions"
-    dec_dir.mkdir(exist_ok=True)
+    dec_dir = tmp_path / ".claude" / "decisions"
+    dec_dir.mkdir(parents=True, exist_ok=True)
     valid_file = dec_dir / "good.md"
     valid_file.write_text(
         '---\nname: "good"\ndescription: "A good decision"\ntype: "decision"\n'
@@ -83,7 +83,7 @@ def test_edit_validation_skips_nonexistent_file():
     state = make_session_state("ev-nofile")
     data = {
         "tool_input": {
-            "file_path": "/nonexistent/decisions/missing.md",
+            "file_path": "/nonexistent/.claude/decisions/missing.md",
         }
     }
     result = _edit_validation_condition(data, state)
@@ -95,8 +95,8 @@ def test_edit_validation_skips_unreadable_file(tmp_path):
     from unittest.mock import patch
     from decision.policy.edit_validation import _edit_validation_condition
 
-    dec_dir = tmp_path / "decisions"
-    dec_dir.mkdir()
+    dec_dir = tmp_path / ".claude" / "decisions"
+    dec_dir.mkdir(parents=True)
     f = dec_dir / "unreadable.md"
     f.write_text("---\nname: test\n---\n# Test\n\nBody.\n")
 
