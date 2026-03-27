@@ -83,6 +83,26 @@ Just code normally. The plugin runs in the background:
 | `/decision --stats` | Shows decision coverage health |
 | `/decision undo` | Reverts the last capture |
 
+### CLI
+
+```
+$ python3 -m decision help
+
+Commands:
+  search <keywords> [--json] [--limit N]  Search decisions (FTS5 + BM25)
+  show <slug>                             Display full decision
+  list [--tag <tag>] [--json]             Browse decisions
+  tags [--json]                           List tags with counts
+  stats [--json] [--health]               Health check (staleness, surfacing analytics)
+  validate                                Check decision files for errors
+  undo [slug]                             Revert a decision
+
+Diagnostic:
+  enrich <slug> [--json]                  Analyze a decision for enrichment opportunities
+  tree [--json]                           Show decisions grouped by codebase area
+  coverage [--json]                       Show decision coverage across the codebase
+```
+
 ## Development
 
 ```sh
