@@ -585,10 +585,10 @@ def test_has_recent_decisions_stat_oserror(tmp_path):
     # Patch Path.stat on files to raise OSError
     original_stat = Path.stat
 
-    def broken_stat(self):
+    def broken_stat(self, **kwargs):
         if self.suffix == ".md" and "decisions" in str(self):
             raise OSError("broken")
-        return original_stat(self)
+        return original_stat(self, **kwargs)
 
     with _patch.object(Path, "stat", broken_stat):
         result = state.has_recent_decisions(str(decisions_dir))
