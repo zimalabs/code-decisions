@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Captures decisions automatically during normal development — then enforces them by surfacing the right constraint before anyone writes code that violates it. Zero config, zero workflow change.
+Captures decisions automatically during normal development — then enforces them by surfacing the right constraint before anyone writes code that violates it. Zero config, zero workflow change. Always advisory, never blocks — safe to adopt incrementally.
 
 ![Demo](assets/demo.gif)
 
@@ -46,6 +46,8 @@ Decisions are captured once and surfaced many times. Each capture makes future s
 - **Inline comments** — Comments explain *what*. Decisions explain *why* — and travel across files via `affects` paths, so one decision can govern many files.
 - **Claude memory** — Memories are personal notes that Claude may or may not recall. Decisions are team knowledge that **actively enforces itself** — they commit to git, surface for every teammate's Claude at the right moment, and show up in PRs.
 
+Decisions are markdown files with YAML frontmatter — `name`, `tags`, and `affects` paths that control auto-surfacing. See the [Guide](GUIDE.md#what-a-decision-looks-like) for the full format.
+
 ## Getting started
 
 Install in Claude Code:
@@ -57,7 +59,7 @@ Install in Claude Code:
 /plugin install decisions@zimalabs
 ```
 
-Zero config. Works immediately after restart.
+Zero config. Works after restart (or `/reload-plugins`).
 
 ### Quick start
 

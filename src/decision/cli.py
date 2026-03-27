@@ -43,6 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # list
     p_list = sub.add_parser("list", help="Browse decisions")
     p_list.add_argument("--tag", default="")
+    p_list.add_argument("--limit", type=int, default=0, help="Max decisions to show (0 = all)")
     p_list.add_argument("--json", action="store_true", dest="as_json")
 
     # tags
@@ -295,6 +296,9 @@ def _cmd_list(args: argparse.Namespace) -> None:
         if tag_filter and tag_filter not in [t.lower() for t in d.tags]:
             continue
         filtered.append(d)
+
+    if args.limit > 0:
+        filtered = filtered[: args.limit]
 
     if args.as_json:
         _json_out(
@@ -830,6 +834,8 @@ def _cmd_enrich(args: argparse.Namespace) -> None:
         print("Suggestions:")
         for s in findings["suggestions"]:
             print(f"  → {s}")
+
+    print(f"\nEdit: `/decision edit {dec.slug}`")
 
 
 # ── Tree command ─────────────────────────────────────────────────────
