@@ -1,6 +1,30 @@
 # Guide
 
-Everything you need beyond the basics — commands, matching rules, team rollout, and maintenance.
+Everything you need beyond the basics — decision format, commands, matching rules, team rollout, and maintenance.
+
+## What a decision looks like
+
+Decisions are markdown files with YAML frontmatter, committed to your repo:
+
+```yaml
+---
+name: "raw-sql-for-dashboards"
+description: "Use raw SQL for admin dashboard queries — ORM is too slow"
+date: "2026-03-24"
+tags:
+  - "performance"
+  - "database"
+affects:
+  - "src/admin/dashboards/"
+  - "src/reports/*.py"
+---
+
+# Use raw SQL for admin dashboard queries
+
+The ORM generates N+1 queries on the dashboard index page...
+```
+
+The `affects` list is how auto-surfacing works — when anyone edits a file matching those paths, the decision injects into Claude's context before it writes code. Matching supports directory prefixes (`src/auth/`), glob patterns (`src/jobs/*.py`), and path-segment suffixes (`policy/engine.py` matches `src/decision/policy/engine.py`). See [How `affects` matching works](#how-affects-matching-works) below for full rules.
 
 ## Commands
 

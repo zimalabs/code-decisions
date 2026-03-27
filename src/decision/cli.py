@@ -408,28 +408,53 @@ def _cmd_health(decisions: list[Decision]) -> None:
     stale: list[tuple[str, int]] = []
     orphaned: list[tuple[str, list[str]]] = []
 
-    for dec in decisions:
-        if not dec.affects or not dec.date:
-            continue
+    # Find the oldest decision date to batch staleness into a single git call
+    dated = [
+        (dec.slug, dec.date, [p for p in dec.affects if "*" not in p and "?" not in p])
+        for dec in decisions
+        if dec.affects and dec.date
+    ]
+    dated = [(s, d, paths) for s, d, paths in dated if paths]
 
-        # Check staleness: significant commits to affected files since decision date
-        affects_args = [p for p in dec.affects if "*" not in p and "?" not in p]
-        if affects_args:
-            try:
-                result = subprocess.run(
-                    ["git", "log", f"--since={dec.date}", "--oneline", "--"] + affects_args,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                commit_count = len(result.stdout.strip().splitlines()) if result.stdout.strip() else 0
+    if dated:
+        oldest_date = min(d for _, d, _ in dated)
+        # Single git log: all paths, all commits since oldest decision
+        all_paths = list(dict.fromkeys(p for _, _, paths in dated for p in paths))
+        try:
+            result = subprocess.run(
+                ["git", "log", f"--since={oldest_date}", "--format=%H %aI", "--name-only", "--"] + all_paths,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            # Parse: build (date, file) pairs from git output
+            # Format: "hash date\n" then filenames, then blank line
+            commits_by_file: dict[str, list[str]] = {}  # file -> [date, ...]
+            current_date = ""
+            for line in (result.stdout or "").splitlines():
+                if not line:
+                    current_date = ""
+                elif " " in line and len(line.split()[0]) == 40:
+                    # Commit line: hash ISO-date
+                    current_date = line.split()[1][:10]  # YYYY-MM-DD
+                elif current_date:
+                    commits_by_file.setdefault(line, []).append(current_date)
+
+            for slug, dec_date, paths in dated:
+                commit_count = 0
+                for p in paths:
+                    for cdate in commits_by_file.get(p, []):
+                        if cdate >= dec_date:
+                            commit_count += 1
                 if commit_count >= STALENESS_COMMIT_THRESHOLD:
-                    stale.append((dec.slug, commit_count))
-            except Exception as exc:
-                _log(f"staleness check failed for {dec.slug}: {exc}")
-                continue
+                    stale.append((slug, commit_count))
+        except Exception as exc:
+            _log(f"staleness check failed: {exc}")
 
-        # Check orphaned affects paths
+    # Check orphaned affects paths
+    for dec in decisions:
+        if not dec.affects:
+            continue
         dead = []
         for p in dec.affects:
             if "*" in p or "?" in p:

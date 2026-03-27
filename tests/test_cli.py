@@ -720,8 +720,14 @@ def test_stats_health_stale_and_orphaned(tmp_path, capsys):
 
         def fake_run(cmd, **kwargs):
             if "git" in cmd and "log" in cmd:
-                # Return many commits to trigger staleness
-                lines = "\n".join(f"abc{i} commit {i}" for i in range(15))
+                # Return --format=%H %aI --name-only output with enough commits
+                blocks = []
+                for i in range(15):
+                    h = f"{'a' * 40}"
+                    blocks.append(f"{h} 2025-06-{i + 1:02d}T00:00:00+00:00")
+                    blocks.append("src/nonexistent_file.py")
+                    blocks.append("")
+                lines = "\n".join(blocks)
                 return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=lines, stderr="")
             return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
