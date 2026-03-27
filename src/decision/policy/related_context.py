@@ -216,16 +216,18 @@ def _related_context_condition(data: dict[str, Any], state: SessionState) -> Pol
                         break
 
     # Phase 2: keyword-based query only if no affects or tag matches
-    keyword_results = ""
+    keyword_titles: list[str] = []
     if not affects_matches and not tag_matches:
         remaining = RELATED_CONTEXT_LIMIT
         path_kw = _path_to_keywords(fp)
         content_kw = _extract_content_keywords(data)
         keywords = " ".join(filter(None, [path_kw] + content_kw))
         if keywords:
-            keyword_results = store.query(keywords, remaining, exclude_slugs=seen_slugs)
+            from ..store.query import query_titles
 
-    if not affects_matches and not tag_matches and not keyword_results:
+            keyword_titles = query_titles(store, keywords, remaining, exclude_slugs=seen_slugs)
+
+    if not affects_matches and not tag_matches and not keyword_titles:
         return None
 
     state.mark_fired(dedup_key)
@@ -255,8 +257,11 @@ def _related_context_condition(data: dict[str, Any], state: SessionState) -> Pol
         titles = [m.split("**")[1] if "**" in m else m for m in tag_matches]
         title_list = ", ".join(f"`{t}`" for t in titles[:3])
         msg = f"[Decision context for {short_path}: {title_list}]"
-    elif keyword_results:
-        msg = f"[Decision context for {short_path} · keyword match]\n{keyword_results}"
+    elif keyword_titles:
+        title_list = ", ".join(f"`{t}`" for t in keyword_titles[:3])
+        n = len(keyword_titles)
+        count_hint = f" (+{n - 3} more)" if n > 3 else ""
+        msg = f"[Decision context for {short_path} · keyword match: {title_list}{count_hint}]"
     else:
         msg = ""
 

@@ -97,6 +97,69 @@ def query_relevant(
     return fallback_result
 
 
+def query_titles(
+    store: DecisionStore,
+    search_terms: str,
+    limit: int = 3,
+    exclude_slugs: set[str] | None = None,
+) -> list[str]:
+    """Search for decisions matching keywords. Returns list of titles.
+
+    Tries FTS5 index first, falls back to keyword matching.
+    """
+    if not search_terms:
+        return []
+
+    index = store._index
+    if index.available:
+        extra = len(exclude_slugs) if exclude_slugs else 0
+        results = index.search(search_terms, limit + extra)
+        if exclude_slugs:
+            results = [r for r in results if r.slug not in exclude_slugs]
+        results = results[:limit]
+        if results:
+            return [r.title for r in results]
+
+    # Fallback: plain keyword matching
+    from ..utils.constants import KEYWORD_WEIGHT_BODY, KEYWORD_WEIGHT_TAGS, KEYWORD_WEIGHT_TITLE
+
+    decisions = store.list_decisions()
+    if not decisions:
+        return []
+
+    raw_terms = search_terms.lower().split()
+    if not raw_terms:
+        return []
+
+    term_variants = [(t, _naive_stem(t)) for t in raw_terms]
+    scored: list[tuple[float, str]] = []
+    for dec in decisions:
+        if exclude_slugs and dec.slug in exclude_slugs:
+            continue
+        title_lower = dec.title.lower()
+        tags_lower = " ".join(dec.tags).lower()
+        desc_lower = dec.description.lower()
+        body_lower = dec.body.lower()
+        score: float = 0
+        for original, stemmed in term_variants:
+            if original in title_lower:
+                score += KEYWORD_WEIGHT_TITLE
+            elif stemmed in title_lower or _fuzzy_match(original, title_lower):
+                score += KEYWORD_WEIGHT_TITLE * 0.6
+            if original in tags_lower or original in desc_lower:
+                score += KEYWORD_WEIGHT_TAGS
+            elif stemmed in tags_lower or stemmed in desc_lower:
+                score += KEYWORD_WEIGHT_TAGS * 0.6
+            if original in body_lower:
+                score += KEYWORD_WEIGHT_BODY
+            elif stemmed in body_lower or _fuzzy_match(original, body_lower):
+                score += KEYWORD_WEIGHT_BODY * 0.6
+        if score > 0:
+            scored.append((score, dec.title))
+    scored.sort(key=lambda x: -x[0])
+    return [title for _, title in scored[:limit]]
+
+
 def _format_fts_results(results: list[SearchResult]) -> str:
     """Format FTS5 search results with relevance and optional grouping."""
     items = []
