@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Decision memory for human + agent teams. Captures *why* choices were made so every Claude session — yours or a teammate's — inherits context instead of repeating debates.
+Decisions that enforce themselves — for human and agent teams. Captures *why* choices were made, then surfaces them automatically before anyone writes code that violates them.
 
 ![Demo](assets/demo.gif)
 
