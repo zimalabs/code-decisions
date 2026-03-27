@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Decisions that enforce themselves — for human and agent teams. Captures *why* choices were made, then surfaces them automatically before anyone writes code that violates them.
+Captures decisions automatically during normal development — then enforces them by surfacing the right constraint before anyone writes code that violates it. Zero config, zero workflow change.
 
 ![Demo](assets/demo.gif)
 
