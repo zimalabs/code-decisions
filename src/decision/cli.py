@@ -108,7 +108,7 @@ def _cmd_search(args: argparse.Namespace) -> None:
         print(f'No results for "{query_str}".')
         return
 
-    use_grouping = args.group or len(results) > 5
+    use_grouping = args.group
 
     if use_grouping:
         # Group by primary tag

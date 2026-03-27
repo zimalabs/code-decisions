@@ -119,8 +119,8 @@ def test_query_relevant_flat_with_relevance(tmp_path):
     assert "●" in result
 
 
-def test_query_relevant_grouped_with_many_results(tmp_path):
-    """query_relevant with >3 results groups by primary tag."""
+def test_query_relevant_flat_with_many_results(tmp_path):
+    """query_relevant with >3 results uses same flat format as fewer results."""
     from decision.store.query import query_relevant
 
     decisions_dir, store = make_store(tmp_path)
@@ -131,5 +131,6 @@ def test_query_relevant_grouped_with_many_results(tmp_path):
 
     result = query_relevant(store, "test", limit=5)
     if result:
-        # If FTS5 found results, they should be grouped
+        # Flat format: relevance dots, no tag group headers
         assert "●" in result
+        assert "**auth**" not in result

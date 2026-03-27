@@ -72,8 +72,7 @@ def query_relevant(
     Tries FTS5 index first (stemming + BM25 ranking), falls back to
     plain keyword matching if FTS5 is unavailable.
 
-    Results include relevance indicators. When more than 3 results,
-    they are grouped by primary tag for easier scanning.
+    Results are always flat (one per line) with relevance indicators.
     """
     if not search_terms:
         return ""
@@ -161,21 +160,13 @@ def query_titles(
 
 
 def _format_fts_results(results: list[SearchResult]) -> str:
-    """Format FTS5 search results with relevance and optional grouping."""
-    items = []
+    """Format FTS5 search results with relevance indicators."""
+    lines = []
     for r in results:
         relevance = _relevance_label(r.rank, is_fts=True)
         tag_str = f"({', '.join(r.tags)})" if r.tags else ""
-        items.append((r.date, r.title, relevance, r.tags, r.excerpt, tag_str))
-
-    if len(items) <= 3:
-        return "\n".join(
-            _format_result_line(date, title, rel, tag_str, excerpt)
-            for date, title, rel, _tags, excerpt, tag_str in items
-        )
-
-    # Group by primary tag when more than 3 results
-    return _format_grouped(items)
+        lines.append(_format_result_line(r.date, r.title, relevance, tag_str, r.excerpt))
+    return "\n".join(lines)
 
 
 def _format_grouped(
@@ -325,16 +316,10 @@ def _keyword_search(
     if not results:
         return ""
 
-    items = []
+    lines = []
     for kw_score, dec in results:
         relevance = _relevance_label(kw_score, is_fts=False)
         tag_str = f"({', '.join(dec.tags)})" if dec.tags else ""
-        items.append((dec.date, dec.title, relevance, dec.tags, dec.reasoning_excerpt, tag_str))
+        lines.append(_format_result_line(dec.date, dec.title, relevance, tag_str, dec.reasoning_excerpt))
 
-    if len(items) <= 3:
-        return "\n".join(
-            _format_result_line(date, title, rel, tag_str, excerpt)
-            for date, title, rel, _tags, excerpt, tag_str in items
-        )
-
-    return _format_grouped(items)
+    return "\n".join(lines)
