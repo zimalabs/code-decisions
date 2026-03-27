@@ -32,6 +32,12 @@ graph TD
 
 Decisions are captured once and surfaced many times. Each capture makes future sessions smarter. Each surface prevents a repeated debate.
 
+## How is this different?
+
+- **ADRs** — Same information, but ADRs are write-once documents in a `docs/` folder. Nobody searches them mid-coding. This plugin captures decisions the same way but **surfaces them at the moment of editing** — before code is written, not after someone remembers to look.
+- **Inline comments** — Comments explain *what*. Decisions explain *why* — and travel across files via `affects` paths, so one decision can govern many files.
+- **Claude memory** — Memories are personal notes that Claude may or may not recall. Decisions are team knowledge that **actively enforces itself** — they commit to git, surface for every teammate's Claude at the right moment, and show up in PRs.
+
 ## Getting started
 
 Install in Claude Code:
@@ -44,6 +50,18 @@ Install in Claude Code:
 ```
 
 Zero config. Works immediately after restart.
+
+### Quick start
+
+> **You:** "Use Redis for the job queue — Sidekiq is too heavy for 50 tenants"
+>
+> **Plugin:** *Captures `.claude/decisions/redis-job-queue.md` automatically*
+>
+> *...next week, you (or a teammate) edit `src/jobs/worker.py`...*
+>
+> **Plugin:** *◆ 1 decision for src/jobs/: Use Redis for the job queue*
+>
+> Claude respects the constraint without anyone searching for it.
 
 ### Everything is automatic
 

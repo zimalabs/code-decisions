@@ -11,7 +11,7 @@ jobs:
     runs-on: [self-hosted, linux]
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v6
@@ -28,14 +28,14 @@ jobs:
         run: make ci
 
       - name: Extract code coverage percentage
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.11'
         id: code
         run: |
           PCT=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100, 1))")
           echo "pct=$PCT" >> $GITHUB_OUTPUT
 
       - name: Update code coverage badge
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.11'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
