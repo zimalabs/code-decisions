@@ -1,0 +1,26 @@
+{
+  "name": "zimalabs",
+  "owner": {
+    "name": "Zima Labs",
+    "url": "https://github.com/zimalabs"
+  },
+  "metadata": {
+    "description": "Plugins by Zima Labs for AI agent memory and cognition"
+  },
+  "plugins": [
+    {
+      "name": "decisions",
+      "source": "./src",
+      "description": "Decision memory for Claude Code — captures why choices were made so future sessions inherit context instead of repeating debates.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "keywords": [
+        "memory", "decisions", "reasoning", "context",
+        "architecture-decisions", "ADR", "knowledge-management",
+        "project-history", "decision-log", "rationale"
+      ],
+      "category": "productivity",
+      "tags": ["memory", "decision-tracking", "context-management", "architecture"]
+    }
+  ]
+}

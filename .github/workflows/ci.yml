@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: [self-hosted, linux]
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run checks with coverage
+        run: make ci
+
+      - name: Extract code coverage percentage
+        if: github.ref == 'refs/heads/main'
+        id: code
+        run: |
+          PCT=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100, 1))")
+          echo "pct=$PCT" >> $GITHUB_OUTPUT
+
+      - name: Update code coverage badge
+        if: github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: 88456bbabc02e9e0d4e980500db87a3e
+          filename: code-coverage.json
+          label: code coverage
+          message: "${{ steps.code.outputs.pct }}%"
+          valColorRange: ${{ steps.code.outputs.pct }}
+          minColorRange: 0
+          maxColorRange: 100

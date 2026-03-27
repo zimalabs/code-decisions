@@ -1,0 +1,17 @@
+{
+  "name": "decisions",
+  "version": "1.0.0",
+  "description": "Gives your codebase a memory for why. Captures decisions automatically, surfaces them when you edit affected files.",
+  "author": {
+    "name": "Zima Labs",
+    "url": "https://github.com/zimalabs"
+  },
+  "repository": "https://github.com/zimalabs/code-decisions",
+  "homepage": "https://github.com/zimalabs/code-decisions",
+  "license": "MIT",
+  "keywords": [
+    "decisions", "memory", "context", "architecture-decisions", "ADR",
+    "decision-log", "rationale", "reasoning", "knowledge-management",
+    "project-history", "onboarding"
+  ]
+}

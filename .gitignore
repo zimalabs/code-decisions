@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.venv/
+
+# Dev tools
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+uv.lock
+
+# OS / Editor
+.DS_Store
+.claude/settings.json
+.claude/settings.local.json
+tmp/
