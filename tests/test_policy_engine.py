@@ -212,7 +212,7 @@ def test_full_engine_with_all_policies():
         engine.register(p)
 
     policies = engine.list_policies()
-    assert len(policies) == 11
+    assert len(policies) == 12
 
     # Verify ordering — BLOCK first
     assert policies[0]["level"] == "BLOCK"
@@ -234,7 +234,7 @@ def test_policy_list_command():
     )
     assert result.returncode == 0
     policies = json.loads(result.stdout)
-    assert len(policies) == 11
+    assert len(policies) == 12
     names = [p["name"] for p in policies]
     assert "content-validation" in names
     assert "session-init" in names

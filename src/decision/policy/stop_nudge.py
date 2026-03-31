@@ -229,7 +229,9 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     if has_unacted:
         phrase = state.load_data("_capture-nudge-pending")
         quote = f' ("{phrase}")' if phrase else ""
-        nudge_msg = f"Uncaptured choice detected{quote} — `/decision capture` next time."
+        nudge_msg = (
+            f"Uncaptured choice detected{quote} — write to `.claude/decisions/` next time. No confirmation needed."
+        )
         if activity_summary:
             nudge_msg = activity_summary + " · " + nudge_msg
         return PolicyResult(matched=True, system_message=nudge_msg)
@@ -296,7 +298,7 @@ def _impl_session_summary(state: SessionState) -> str | None:
 
     return (
         f"{n_files} new file{'s' if n_files != 1 else ''} created, no decisions captured"
-        " — `/decision capture` if choices were made"
+        " — write decisions to `.claude/decisions/` if choices were made"
     )
 
 
@@ -326,4 +328,4 @@ def _plan_session_summary(state: SessionState) -> str | None:
 
     n = len(candidates)
 
-    return f"{n} plan choice{'s' if n != 1 else ''} uncaptured — `/decision capture` while reasoning is fresh"
+    return f"{n} plan choice{'s' if n != 1 else ''} uncaptured — write to `.claude/decisions/` while reasoning is fresh"

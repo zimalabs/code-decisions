@@ -16,6 +16,7 @@ EXPECTED_POLICY_ORDER = [
     # CONTEXT
     "session-context",
     "related-context",
+    "index-update",
     # NUDGE
     "capture-nudge",
     "query-preseed",

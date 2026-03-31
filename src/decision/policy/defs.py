@@ -19,6 +19,7 @@ from .edit_checkpoint import _edit_checkpoint_condition
 from .edit_validation import _edit_validation_condition
 from .engine import Policy, PolicyLevel
 from .impl_nudge import _impl_nudge_condition
+from .index_update import _index_update_condition
 from .plan_nudge import _plan_nudge_condition
 from .query_preseed import _query_preseed_condition
 from .related_context import _related_context_condition
@@ -81,6 +82,14 @@ ALL_POLICIES: list[Policy] = [
         events=["PostToolUse"],
         matchers=sorted(WRITE_TOOLS),
         condition=_related_context_condition,
+    ),
+    Policy(
+        name="index-update",
+        description="Auto-regenerate .claude/rules/decisions.md after decision writes",
+        level=PolicyLevel.CONTEXT,
+        events=["PostToolUse"],
+        matchers=["Write"],
+        condition=_index_update_condition,
     ),
     # NUDGE
     Policy(

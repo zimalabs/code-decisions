@@ -79,6 +79,8 @@ if [[ "$event" == "PostToolUse" ]]; then
         # END SKIP_PATTERNS
             if [[ "$_fp" == *"$pat"* ]]; then _skip=true; break; fi
         done
+        # Carve-out: always run Python for decision file writes (index-update policy)
+        if [[ "$_skip" == "true" && "$_fp" == *"/decisions/"*".md" ]]; then _skip=false; fi
         if [[ "$_skip" == "true" ]]; then printf '{}\n'; exit 0; fi
 
         # Dedup: skip Python if this file_path was already dispatched this session.

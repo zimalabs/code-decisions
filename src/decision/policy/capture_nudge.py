@@ -180,5 +180,5 @@ def _capture_nudge_condition(data: dict[str, Any], state: SessionState) -> Polic
     return PolicyResult(
         matched=True,
         ok=True,
-        reason="Capture this? `/decision capture <title>`",
+        reason="Decision detected — write to `.claude/decisions/` now. No confirmation needed.",
     )

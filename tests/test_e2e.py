@@ -519,7 +519,7 @@ class TestNudges:
         }
         output = _parse_engine_output(engine.evaluate("UserPromptSubmit", data, state))
         assert output.get("reason") is not None
-        assert "capture" in output.get("reason", "").lower()
+        assert "Decision detected" in output.get("reason", "")
 
     def test_capture_nudge_no_false_positive(self, store_and_state):
         """'let's go with pizza' → no nudge (no technical signal)."""
@@ -530,7 +530,7 @@ class TestNudges:
         }
         output = _parse_engine_output(engine.evaluate("UserPromptSubmit", data, state))
         reason = output.get("reason", "")
-        assert "capture" not in reason.lower()
+        assert "Decision detected" not in reason
 
     def test_capture_nudge_past_decision_query(self, store_and_state):
         """'why did we choose redis' → pre-seeds search results."""
@@ -556,11 +556,11 @@ class TestNudges:
 
         # First: fires
         out1 = _parse_engine_output(engine.evaluate("UserPromptSubmit", data, state))
-        has_capture1 = "capture" in out1.get("reason", "").lower()
+        has_capture1 = "Decision detected" in out1.get("reason", "")
 
         # Second: should not re-fire capture nudge for same phrase
         out2 = _parse_engine_output(engine.evaluate("UserPromptSubmit", data, state))
-        has_capture2 = "capture" in out2.get("reason", "").lower()
+        has_capture2 = "Decision detected" in out2.get("reason", "")
 
         assert has_capture1  # First should fire
         assert not has_capture2  # Second should be deduped
@@ -584,7 +584,7 @@ class TestSubprocessPipeline:
         parsed = json.loads(result.stdout.strip())
         if parsed:
             reason = parsed.get("reason", "")
-            assert "capture" in reason.lower() or parsed.get("ok") is not None
+            assert "Decision detected" in reason or parsed.get("ok") is not None
 
     def test_dispatch_stop_nudge(self, dispatch_env, tmp_path):
         """Pre-seed session edits + Stop → nudge in JSON."""

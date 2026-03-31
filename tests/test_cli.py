@@ -403,7 +403,7 @@ def test_policy_list(capsys):
         main()
     captured = capsys.readouterr()
     policies = json.loads(captured.out)
-    assert len(policies) == 11
+    assert len(policies) == 12
 
 
 def test_policy_evaluate_event(capsys):
@@ -467,7 +467,7 @@ def test_subprocess_policy_list():
     )
     assert result.returncode == 0
     policies = json.loads(result.stdout)
-    assert len(policies) == 11
+    assert len(policies) == 12
 
 
 def test_subprocess_policy_evaluate():

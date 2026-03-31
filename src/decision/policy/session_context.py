@@ -53,9 +53,7 @@ def capture_template() -> str:
         "Always populate `affects` — auto-infer from files edited this session "
         "(deduplicate to directory prefixes when 3+ files share a dir). "
         "Never leave affects empty — decisions without it are invisible to proximity context. "
-        "Update `.claude/rules/decisions.md` with a descriptive entry — include the key constraint and WHY, "
-        "not just the title (e.g. `- [slug](file.md) — Use X not Y because Z. Do not switch to Y.`). "
-        "The index line must be enough to act on without reading the file. "
+        "The rules index at `.claude/rules/decisions.md` updates automatically. "
         "Confirm briefly, then continue with whatever the user asked."
     )
 

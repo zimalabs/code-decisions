@@ -18,7 +18,7 @@ def test_capture_nudge_detects_decision_language():
     result = _capture_nudge_condition(data, state)
     assert result is not None
     assert result.matched is True
-    assert "capture" in str(result.reason)
+    assert "Decision detected" in str(result.reason)
 
 
 def test_capture_nudge_fires_at_advise():
@@ -30,7 +30,7 @@ def test_capture_nudge_fires_at_advise():
     result = _capture_nudge_condition(data, state)
     assert result is not None
     assert result.matched is True
-    assert "Capture this?" in result.reason
+    assert "Decision detected" in result.reason
 
 
 def test_capture_nudge_detects_query(tmp_path):
@@ -121,7 +121,7 @@ def test_capture_nudge_terse_message():
     data = {"tool_input": {"content": "Let's go with PostgreSQL for the database"}}
     result = _capture_nudge_condition(data, state)
     assert result is not None
-    assert result.reason == "Capture this? `/decision capture <title>`"
+    assert result.reason == "Decision detected — write to `.claude/decisions/` now. No confirmation needed."
 
 
 def test_capture_nudge_returns_ok_true():
@@ -133,7 +133,7 @@ def test_capture_nudge_returns_ok_true():
     result = _capture_nudge_condition(data, state)
     assert result is not None
     assert result.ok is True
-    assert "Capture this?" in result.reason
+    assert "Decision detected" in result.reason
 
 
 # ── Capture-nudge dismiss test ──────────────────────────────────────
@@ -148,7 +148,7 @@ def test_capture_nudge_fires_with_prompt_field():
     result = _capture_nudge_condition(data, state)
     assert result is not None
     assert result.matched is True
-    assert "Capture this?" in result.reason
+    assert "Decision detected" in result.reason
 
 
 def test_capture_nudge_query_with_prompt_field(tmp_path):

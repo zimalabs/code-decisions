@@ -23,7 +23,7 @@ The SessionStart hook injects a `Decision CLI: ...` line into conversation conte
 ## Search
 
 1. **Check pre-seeded results first** — a hook runs FTS5 search automatically when `/decision <keywords>` is invoked. If results exist in conversation context, present them directly.
-2. **If pre-seeded results are empty or insufficient**: run `python3 -m decision search <keywords>`.
+2. **If pre-seeded results are empty or insufficient**: use `Grep` to search `.claude/decisions/` files for keywords, then `Read` matching files to present results. This avoids permission prompts. Only fall back to `python3 -m decision search <keywords>` via CLI if native tools fail.
 3. **Flags**: `--tags` → `python3 -m decision tags`, `--stats` → `python3 -m decision stats`, `--coverage` → `python3 -m decision coverage`
 
 ## Capture

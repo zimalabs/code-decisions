@@ -27,7 +27,7 @@ def test_checkpoint_fires_after_unacted_capture(tmp_path):
     assert result is not None
     assert result.matched is True
     assert "Uncaptured choice detected" in result.system_message
-    assert "/decision capture" in result.system_message
+    assert ".claude/decisions/" in result.system_message
     # Should quote the original phrase
     assert "going with" in result.system_message
 

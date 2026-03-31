@@ -56,5 +56,5 @@ def _edit_checkpoint_condition(data: dict[str, Any], state: SessionState) -> Pol
 
     return PolicyResult(
         matched=True,
-        system_message=(f"Uncaptured choice detected{quote} — `/decision capture` if a decision was made."),
+        system_message=(f"Uncaptured choice detected{quote} — write to `.claude/decisions/` if a decision was made."),
     )
