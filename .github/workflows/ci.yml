@@ -36,7 +36,7 @@ jobs:
 
       - name: Update code coverage badge
         if: github.ref == 'refs/heads/main' && matrix.python-version == '3.11'
-        uses: schneegans/dynamic-badges-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@v1.8.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
           gistID: 88456bbabc02e9e0d4e980500db87a3e
