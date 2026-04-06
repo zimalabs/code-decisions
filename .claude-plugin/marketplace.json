@@ -12,7 +12,7 @@
       "name": "decisions",
       "source": "./src",
       "description": "Decision memory for Claude Code — captures why choices were made so future sessions inherit context instead of repeating debates.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "license": "MIT",
       "keywords": [
         "memory", "decisions", "reasoning", "context",

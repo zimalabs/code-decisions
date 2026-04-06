@@ -942,6 +942,25 @@ def main() -> None:
         print(f"decision {__version__}")
         sys.exit(0)
 
+    if cmd in ("--help", "-h"):
+        _cmd_help()
+        sys.exit(0)
+
+    # Support --flag aliases for common subcommands (e.g. --tags → tags)
+    _FLAG_ALIASES: dict[str, str] = {
+        "--tags": "tags",
+        "--stats": "stats",
+        "--coverage": "coverage",
+        "--health": "stats",
+    }
+    if cmd in _FLAG_ALIASES:
+        alias_target = _FLAG_ALIASES[cmd]
+        sys.argv[1] = alias_target
+        # --health maps to stats --health
+        if cmd == "--health":
+            sys.argv.insert(2, "--health")
+        cmd = alias_target
+
     if cmd not in _COMMAND_DISPATCH:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         print("Run 'python3 -m decision help' for available commands.", file=sys.stderr)

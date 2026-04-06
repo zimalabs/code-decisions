@@ -11,7 +11,7 @@ uv sync        # install dev deps
 make check     # ruff + mypy + shellcheck + pytest
 ```
 
-**Requirements:** Python 3.11+, [uv](https://docs.astral.sh/uv/)
+**Requirements:** Python 3.9+, [uv](https://docs.astral.sh/uv/)
 
 To test the plugin end-to-end in Claude Code:
 

@@ -83,6 +83,53 @@ def test_main_unknown_command():
             main()
 
 
+# ── Flag Aliases ─────────────────────────────────────────────────────
+
+
+def test_flag_alias_help(capsys):
+    """--help shows the same output as the help subcommand."""
+    with patch.object(sys, "argv", ["decision", "--help"]):
+        with pytest.raises(SystemExit, match="0"):
+            main()
+    out = capsys.readouterr().out
+    assert "search" in out
+
+
+def test_flag_alias_tags(tmp_path, capsys):
+    """--tags works as an alias for the tags subcommand."""
+    with _with_home(tmp_path):
+        with patch.object(sys, "argv", ["decision", "--tags"]):
+            main()
+    # Should not raise — empty output is fine for 0 decisions
+
+
+def test_flag_alias_stats(tmp_path, capsys):
+    """--stats works as an alias for the stats subcommand."""
+    with _with_home(tmp_path):
+        with patch.object(sys, "argv", ["decision", "--stats"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Decisions:" in out
+
+
+def test_flag_alias_coverage(tmp_path, capsys):
+    """--coverage works as an alias for the coverage subcommand."""
+    with _with_home(tmp_path):
+        with patch.object(sys, "argv", ["decision", "--coverage"]):
+            main()
+    out = capsys.readouterr().out
+    assert "coverage" in out.lower()
+
+
+def test_flag_alias_health(tmp_path, capsys):
+    """--health maps to stats --health."""
+    with _with_home(tmp_path):
+        with patch.object(sys, "argv", ["decision", "--health"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Decisions:" in out
+
+
 # ── Search ───────────────────────────────────────────────────────────
 
 
