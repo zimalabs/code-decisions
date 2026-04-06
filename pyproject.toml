@@ -1,5 +1,10 @@
 [project]
 name = "decision-dev"
+description = "Decision memory for Claude Code — captures why choices were made and surfaces them when you edit affected files."
+authors = [{ name = "Zima Labs", email = "hello@zimalabs.ai" }]
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["decisions", "memory", "architecture-decisions", "ADR", "claude-code", "knowledge-management"]
 requires-python = ">=3.9"
 dynamic = ["version"]
 classifiers = [
@@ -15,6 +20,13 @@ classifiers = [
     "Topic :: Software Development :: Version Control :: Git",
     "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/zimalabs/code-decisions"
+Repository = "https://github.com/zimalabs/code-decisions"
+Documentation = "https://github.com/zimalabs/code-decisions/blob/main/GUIDE.md"
+Changelog = "https://github.com/zimalabs/code-decisions/blob/main/CHANGELOG.md"
+Issues = "https://github.com/zimalabs/code-decisions/issues"
 
 [dependency-groups]
 dev = [
