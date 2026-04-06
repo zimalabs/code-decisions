@@ -11,7 +11,7 @@ import dataclasses
 import json
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -357,7 +357,7 @@ def _cmd_stats(args: argparse.Namespace) -> None:
 
     total = len(decisions)
 
-    cutoff = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
     recent = sum(1 for d in decisions if d.date >= cutoff)
 
     unique_tags = len(tags)

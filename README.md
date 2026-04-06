@@ -1,7 +1,7 @@
 # code-decisions
 
 [![CI](https://github.com/zimalabs/code-decisions/actions/workflows/ci.yml/badge.svg)](https://github.com/zimalabs/code-decisions/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Captures decisions automatically during normal development — then enforces them by surfacing the right constraint before anyone writes code that violates it. Zero config, zero workflow change. Always advisory, never blocks — safe to adopt incrementally.

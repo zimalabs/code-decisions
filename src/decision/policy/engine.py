@@ -32,7 +32,7 @@ class PolicyLevel(enum.IntEnum):
     NUDGE = 3
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class PolicyResult:
     """Structured output from a policy evaluation."""
 
@@ -71,7 +71,7 @@ class PolicyResult:
         return {}
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class Policy:
     """A single enforceable policy."""
 
@@ -479,7 +479,7 @@ class PolicyEngine:
             except Exception as exc:
                 elapsed = round((time.monotonic() - t0) * 1000, 1)
                 self.last_trace.append(self._trace_entry(policy, skipped=f"error: {exc}", elapsed_ms=elapsed))
-                tb = traceback.format_exception(exc)
+                tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
                 _log(f"policy {policy.name} error: {type(exc).__name__}: {exc}\n{''.join(tb)}")
                 continue
             elapsed = round((time.monotonic() - t0) * 1000, 1)

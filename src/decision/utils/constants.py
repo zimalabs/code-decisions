@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Union
 
 # ── Nudge budget (fixed — plugin is always advise-only) ───────────
 NUDGE_BUDGET = 2
@@ -169,4 +170,4 @@ MAX_SESSION_EDITS = 500  # Cap unique file paths tracked per session
 
 # ── Type aliases ─────────────────────────────────────────────────────
 
-StrPath = str | Path
+StrPath = Union[str, Path]

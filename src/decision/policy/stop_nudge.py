@@ -104,13 +104,13 @@ def _check_staleness(state: SessionState) -> str | None:
         return None
 
     try:
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         from ..utils.constants import STALENESS_AGE_DAYS
         from .related_context import _affects_match
 
         store = state.get_store()
-        cutoff = datetime.now(UTC).date() - timedelta(days=STALENESS_AGE_DAYS)
+        cutoff = datetime.now(timezone.utc).date() - timedelta(days=STALENESS_AGE_DAYS)
         cutoff_str = cutoff.isoformat()
 
         stale_slugs: dict[str, str] = {}  # slug -> date
@@ -168,7 +168,7 @@ def _update_surfacing_history(state: SessionState) -> None:
 def _check_never_surfaced(state: SessionState) -> str | None:
     """Warn about recent decisions with affects that have never surfaced in any session."""
     try:
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         from ..utils.constants import NEVER_SURFACED_AGE_DAYS
         from ..utils.helpers import _state_dir
@@ -183,7 +183,7 @@ def _check_never_surfaced(state: SessionState) -> str | None:
                 pass
 
         store = state.get_store()
-        cutoff = (datetime.now(UTC).date() - timedelta(days=NEVER_SURFACED_AGE_DAYS)).isoformat()
+        cutoff = (datetime.now(timezone.utc).date() - timedelta(days=NEVER_SURFACED_AGE_DAYS)).isoformat()
 
         never_surfaced: list[str] = []
         for slug, _title, date, _tags, affects in store.decisions_with_affects():

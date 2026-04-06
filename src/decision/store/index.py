@@ -32,7 +32,7 @@ def _get_schema() -> str:
     return _schema_cache
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class DecisionSummary:
     """Lightweight decision summary from the FTS5 index (no file parsing)."""
 
@@ -44,7 +44,7 @@ class DecisionSummary:
     excerpt: str
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class SearchResult:
     """A single search result from the FTS5 index."""
 

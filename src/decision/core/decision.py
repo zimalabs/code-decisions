@@ -17,7 +17,7 @@ from ..utils.frontmatter import _split_yaml_frontmatter
 from ..utils.helpers import _parse_list_field
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class Decision:
     """Parsed representation of a decision markdown file (YAML frontmatter).
 
