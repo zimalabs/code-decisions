@@ -3,9 +3,29 @@
 import json
 import os
 import time
+from unittest.mock import patch
 
 import decision
 from conftest import make_session_state, make_decision, make_store
+
+
+def _write_jsonl(path, entries):
+    """Write a list of dicts as JSONL lines."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        for entry in entries:
+            f.write(json.dumps(entry) + "\n")
+
+
+def _assistant_entry(text):
+    """Build a minimal assistant JSONL entry with a text block."""
+    return {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": text}],
+        },
+    }
 
 
 # ── stop-nudge tests ──────────────────────────────────────────────
@@ -476,3 +496,146 @@ def test_stop_nudge_cleans_up_session_dir(tmp_path):
 
     # Session dir should be removed after stop
     assert not state._dir.is_dir()
+
+
+# ── Assistant transcript scanning ──────────────────────────────────
+
+
+def test_assistant_scan_detects_decision_phrase(tmp_path):
+    """Transcript scan detects decision language with corroboration in assistant text."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _scan_assistant_decisions
+
+    jsonl_path = tmp_path / "session.jsonl"
+    _write_jsonl(jsonl_path, [
+        _assistant_entry("Going with `serde_json::Value` for tool inputs because they vary wildly."),
+    ])
+
+    state = make_session_state("ascan-detect", store=store)
+
+    with patch("decision.utils.helpers._discover_transcript", return_value=jsonl_path):
+        phrases = _scan_assistant_decisions(state)
+
+    assert len(phrases) >= 1
+    assert "going with" in phrases[0]
+
+
+def test_assistant_scan_requires_corroboration(tmp_path):
+    """Bare decision phrase without tech/reasoning signal is not detected."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _scan_assistant_decisions
+
+    jsonl_path = tmp_path / "session.jsonl"
+    # "going with" but no technical signal, no reasoning signal
+    _write_jsonl(jsonl_path, [
+        _assistant_entry("Going with the simpler option here."),
+    ])
+
+    state = make_session_state("ascan-nocorr", store=store)
+
+    with patch("decision.utils.helpers._discover_transcript", return_value=jsonl_path):
+        phrases = _scan_assistant_decisions(state)
+
+    assert phrases == []
+
+
+def test_assistant_scan_skips_user_detected(tmp_path):
+    """Phrases already detected by capture_nudge are deduplicated."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _scan_assistant_decisions
+
+    jsonl_path = tmp_path / "session.jsonl"
+    _write_jsonl(jsonl_path, [
+        _assistant_entry("Going with `serde_json` because it's the standard."),
+    ])
+
+    state = make_session_state("ascan-dedup", store=store)
+    state.mark_fired("_capture-nudge-pending")
+    state.store_data("_capture-nudge-pending", "going with")
+
+    with patch("decision.utils.helpers._discover_transcript", return_value=jsonl_path):
+        phrases = _scan_assistant_decisions(state)
+
+    assert phrases == []
+
+
+def test_assistant_scan_no_transcript(tmp_path):
+    """Graceful empty result when transcript doesn't exist."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _scan_assistant_decisions
+
+    state = make_session_state("ascan-none", store=store)
+
+    with patch("decision.utils.helpers._discover_transcript", return_value=None):
+        phrases = _scan_assistant_decisions(state)
+
+    assert phrases == []
+
+
+def test_assistant_scan_corrupt_jsonl(tmp_path):
+    """Malformed JSON lines are skipped gracefully."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _scan_assistant_decisions
+
+    jsonl_path = tmp_path / "session.jsonl"
+    jsonl_path.write_text(
+        "{broken json!!!\n"
+        + json.dumps(_assistant_entry("Going with `Redis` because it's faster.")) + "\n"
+        + "another broken line\n"
+    )
+
+    state = make_session_state("ascan-corrupt", store=store)
+
+    with patch("decision.utils.helpers._discover_transcript", return_value=jsonl_path):
+        phrases = _scan_assistant_decisions(state)
+
+    assert len(phrases) >= 1
+    assert "going with" in phrases[0]
+
+
+def test_assistant_scan_respects_dismissed(tmp_path):
+    """No assistant scan when nudges are dismissed."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _assistant_decision_summary
+
+    state = make_session_state("ascan-dismissed", store=store)
+    state.mark_nudges_dismissed()
+
+    result = _assistant_decision_summary(state)
+    assert result is None
+
+
+def test_assistant_scan_in_stop_nudge(tmp_path):
+    """End-to-end: assistant decision phrase appears in stop-nudge output."""
+    _, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _stop_nudge_condition
+
+    jsonl_path = tmp_path / "session.jsonl"
+    _write_jsonl(jsonl_path, [
+        _assistant_entry("I chose `PostgreSQL` over SQLite because we need concurrent writes."),
+    ])
+
+    state = make_session_state("ascan-e2e", store=store)
+    state.record_edit("src/db/connection.py")
+
+    with patch("decision.utils.helpers._discover_transcript", return_value=jsonl_path):
+        result = _stop_nudge_condition({}, state)
+
+    assert result is not None
+    assert "assistant stated" in result.system_message.lower()
+
+
+def test_assistant_scan_silent_when_decisions_captured(tmp_path):
+    """No assistant scan nudge when decisions were already captured this session."""
+    decisions_dir, store = make_store(tmp_path)
+    from decision.policy.stop_nudge import _assistant_decision_summary
+
+    # Simulate a decision being captured after session start
+    f = make_decision(decisions_dir, "test-captured")
+    future = time.time() + 1
+    os.utime(f, (future, future))
+
+    state = make_session_state("ascan-captured", store=store)
+
+    result = _assistant_decision_summary(state)
+    assert result is None

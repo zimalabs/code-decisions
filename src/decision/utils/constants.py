@@ -168,6 +168,10 @@ NEVER_SURFACED_AGE_DAYS = 30  # warn about recent decisions that never surfaced
 # Session activity
 MAX_SESSION_EDITS = 500  # Cap unique file paths tracked per session
 
+# Transcript scanning (assistant decision detection at Stop time)
+TRANSCRIPT_TAIL_BYTES = 65_536  # Read last 64KB of JSONL
+TRANSCRIPT_MAX_BLOCKS = 20  # Max assistant text blocks to scan
+
 # ── Type aliases ─────────────────────────────────────────────────────
 
 StrPath = Union[str, Path]
