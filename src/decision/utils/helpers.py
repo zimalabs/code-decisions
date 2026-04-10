@@ -92,6 +92,15 @@ def _file_lock(lock_path: Path) -> Generator[None, None, None]:
                 fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def _discover_transcript(session_id: str | None = None) -> Path | None:
+    """Return the session JSONL transcript path, or None if unavailable."""
+    sid = session_id or os.environ.get("CLAUDE_SESSION_ID")
+    if not sid:
+        return None
+    path = Path.home() / ".claude" / "projects" / _project_key() / f"{sid}.jsonl"
+    return path if path.is_file() else None
+
+
 def _path_to_keywords(path: str) -> str:
     """Extract searchable words from a file path."""
     parts = Path(path).parts

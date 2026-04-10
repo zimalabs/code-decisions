@@ -208,6 +208,117 @@ def _check_never_surfaced(state: SessionState) -> str | None:
         return None  # Never break Claude Code
 
 
+def _scan_assistant_decisions(state: SessionState) -> list[str]:
+    """Scan the session transcript for decision language in assistant messages.
+
+    Reads the tail of the JSONL transcript, parses assistant text blocks, and
+    applies the same corroboration requirements as capture_nudge. Returns a list
+    of matched decision phrases (max 3).
+    """
+    from ..utils.constants import TRANSCRIPT_MAX_BLOCKS, TRANSCRIPT_TAIL_BYTES
+    from ..utils.helpers import _discover_transcript
+    from .capture_nudge import (
+        _DECISION_PHRASE,
+        _REASONING_SIGNAL,
+        _has_nearby_technical,
+        _is_false_positive,
+    )
+
+    try:
+        path = _discover_transcript()
+        if path is None:
+            return []
+
+        # Read the tail of the file to bound scan time
+        file_size = path.stat().st_size
+        with open(path, encoding="utf-8", errors="replace") as f:
+            if file_size > TRANSCRIPT_TAIL_BYTES:
+                f.seek(file_size - TRANSCRIPT_TAIL_BYTES)
+                f.readline()  # discard partial first line
+            lines = f.readlines()
+
+        # Extract text blocks from assistant messages
+        texts: list[str] = []
+        for line in reversed(lines):
+            if len(texts) >= TRANSCRIPT_MAX_BLOCKS:
+                break
+            try:
+                obj = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if obj.get("type") != "assistant":
+                continue
+            content = obj.get("message", {}).get("content", [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text = block.get("text", "")
+                    if text:
+                        texts.append(text)
+
+        if not texts:
+            return []
+
+        # Deduplicate against phrases already detected by capture_nudge
+        already_detected = state.load_data("_capture-nudge-pending").lower()
+
+        phrases: list[str] = []
+        seen: set[str] = set()
+        for text in texts:
+            text_lower = text.lower()
+            match_iter = list(_DECISION_PHRASE.finditer(text_lower))
+            if not match_iter:
+                continue
+
+            real_matches = [m for m in match_iter if not _is_false_positive(text_lower, m.end())]
+            if not real_matches:
+                continue
+
+            # Corroboration: same bar as capture_nudge neutral context
+            has_nearby_tech = any(_has_nearby_technical(text, m.start(), m.end()) for m in real_matches)
+            has_reasoning = bool(_REASONING_SIGNAL.search(text_lower))
+            has_multiple = len(set(m.group(0) for m in real_matches)) >= 2
+
+            if not (has_nearby_tech or has_reasoning or has_multiple):
+                continue
+
+            for m in real_matches:
+                phrase = m.group(0)
+                if phrase in seen:
+                    continue
+                # Skip if capture_nudge already detected this phrase from user input
+                if already_detected and phrase in already_detected:
+                    continue
+                seen.add(phrase)
+                phrases.append(phrase)
+                if len(phrases) >= 3:
+                    return phrases
+
+        return phrases
+    except Exception as exc:
+        print(f"decision: _scan_assistant_decisions error: {exc}", file=sys.stderr)
+        return []
+
+
+def _assistant_decision_summary(state: SessionState) -> str | None:
+    """Check for decision language in assistant messages via transcript scanning."""
+    if state.nudges_dismissed():
+        return None
+
+    store = state.get_store()
+    if state.has_recent_decisions(store.decisions_dir):
+        return None
+
+    phrases = _scan_assistant_decisions(state)
+    if not phrases:
+        return None
+
+    if len(phrases) == 1:
+        return f'Assistant stated a choice ("{phrases[0]}") — write to `.claude/decisions/` to preserve context'
+    return f"Assistant stated {len(phrases)} uncaptured choices — write to `.claude/decisions/` to preserve context"
+
+
 def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyResult | None:
     """Show a compact one-line summary at session end. Never a wall of text."""
     # Persist surfacing analytics before building summary
@@ -240,9 +351,10 @@ def _stop_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
     suppress_coaching = _should_suppress_coaching()
 
     # Pick the single highest-priority secondary hint (one sentence max).
-    # Priority: impl session > plan session > staleness > never-surfaced.
+    # Priority: assistant scan > impl session > plan session > staleness > never-surfaced.
     secondary_msg: str | None = None
-    if not suppress_coaching:
+    secondary_msg = _assistant_decision_summary(state)
+    if secondary_msg is None and not suppress_coaching:
         secondary_msg = _impl_session_summary(state)
     if secondary_msg is None and not suppress_coaching:
         secondary_msg = _plan_session_summary(state)
