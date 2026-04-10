@@ -1,6 +1,6 @@
 {
   "name": "decisions",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Gives your codebase a memory for why. Captures decisions automatically, surfaces them when you edit affected files.",
   "author": {
     "name": "Zima Labs",
