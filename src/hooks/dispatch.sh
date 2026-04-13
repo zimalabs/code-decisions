@@ -81,6 +81,8 @@ if [[ "$event" == "PostToolUse" ]]; then
         done
         # Carve-out: always run Python for decision file writes (index-update policy)
         if [[ "$_skip" == "true" && "$_fp" == *"/decisions/"*".md" ]]; then _skip=false; fi
+        # Carve-out: always run Python for superpowers spec/plan writes (plan-nudge policy)
+        if [[ "$_skip" == "true" && "$_fp" == *"/superpowers/"*".md" ]]; then _skip=false; fi
         if [[ "$_skip" == "true" ]]; then printf '{}\n'; exit 0; fi
 
         # Dedup: skip Python if this file_path was already dispatched this session.

@@ -1,8 +1,11 @@
-"""NUDGE policy — extract decision candidates from Claude Code plan files.
+"""NUDGE policy — extract decision candidates from plan and spec files.
 
 Two-phase behavior:
-  Phase 1 (plan file Write): Scan content, extract candidates, store in state.
+  Phase 1 (plan/spec file Write): Scan content, extract candidates, store in state.
   Phase 2 (first non-plan PostToolUse): Nudge with candidate list.
+
+Supports both Claude Code plans (.claude/plans/) and Superpowers specs/plans
+(docs/superpowers/specs/, docs/superpowers/plans/).
 """
 
 from __future__ import annotations
@@ -23,7 +26,13 @@ _PLAN_DECISION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# File paths in "Files to Change" sections
+# Approach/option sections in superpowers specs — richer decision content
+_APPROACH_RE = re.compile(
+    r"(?:approach|option|alternative)\s*\d?\s*[:—\-]\s*(.{10,120})",
+    re.IGNORECASE,
+)
+
+# File paths in "Files to Change" / "File Structure" sections
 _PLAN_FILE_PATH_RE = re.compile(
     r"(?:New|Modify|Change|Update|Create):\s*`?("
     r"(?:src|lib|app|tests?|pkg|internal|cmd)/[^\s`]+"
@@ -38,14 +47,26 @@ _KEY_PLAN_PATH = "_plan-file-path"
 
 
 def _is_plan_file(file_path: str) -> bool:
-    """Return True if file_path is a Claude Code plan file."""
-    return ".claude/plans/" in file_path and file_path.endswith(".md")
+    """Return True if file_path is a plan or spec file we should scan."""
+    if not file_path.endswith(".md"):
+        return False
+    return (
+        ".claude/plans/" in file_path
+        or "docs/superpowers/specs/" in file_path
+        or "docs/superpowers/plans/" in file_path
+    )
+
+
+def _is_superpowers_file(file_path: str) -> bool:
+    """Return True if file_path is a superpowers spec or plan."""
+    return "docs/superpowers/" in file_path
 
 
 def _extract_decision_candidates(content: str) -> list[dict[str, str]]:
-    """Scan plan markdown for decision signals.
+    """Scan plan/spec markdown for decision signals.
 
     Returns list of {"title": ..., "reasoning": ...} dicts.
+    Matches explicit decision language and approach/option sections.
     """
     content = content[:20_000]  # cap scan size
     candidates: list[dict[str, str]] = []
@@ -53,7 +74,6 @@ def _extract_decision_candidates(content: str) -> list[dict[str, str]]:
 
     for m in _PLAN_DECISION_RE.finditer(content):
         snippet = m.group(0).strip()
-        # Derive a short title from the first ~60 chars
         title = snippet[:60].rstrip(".,;:!? ")
         if title in seen_titles:
             continue
@@ -61,6 +81,18 @@ def _extract_decision_candidates(content: str) -> list[dict[str, str]]:
         candidates.append({"title": title, "reasoning": snippet[:120]})
         if len(candidates) >= PLAN_CANDIDATE_MAX:
             break
+
+    # Supplement with approach/option sections (common in superpowers specs)
+    if len(candidates) < PLAN_CANDIDATE_MAX:
+        for m in _APPROACH_RE.finditer(content):
+            snippet = m.group(1).strip()
+            title = snippet[:60].rstrip(".,;:!? ")
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+            candidates.append({"title": title, "reasoning": snippet[:120]})
+            if len(candidates) >= PLAN_CANDIDATE_MAX:
+                break
 
     return candidates
 
@@ -163,11 +195,25 @@ def _plan_nudge_condition(data: dict[str, Any], state: SessionState) -> PolicyRe
             pass
     affects_hint = f"\nAffects: {', '.join(plan_affects[:5])}" if plan_affects else ""
 
-    msg = (
-        f"The implementation plan contains {n} decision-worthy choice{'s' if n != 1 else ''}:\n"
-        f"{titles_str}{more}\n"
-        "Capture these as you implement — reasoning is freshest now:\n"
-        f"`/decision we chose X because Y`{affects_hint}"
-    )
+    # Tailor message to source type
+    plan_path = state.load_data(_KEY_PLAN_PATH) or ""
+    if _is_superpowers_file(plan_path):
+        # Extract readable name from path: docs/superpowers/specs/2026-04-13-auth-design.md → "auth-design"
+        source_name = plan_path.rsplit("/", 1)[-1].removesuffix(".md")
+        source_type = "spec" if "/specs/" in plan_path else "plan"
+        msg = (
+            f'The superpowers {source_type} "{source_name}" contains'
+            f" {n} decision-worthy choice{'s' if n != 1 else ''}:\n"
+            f"{titles_str}{more}\n"
+            "Capture these as decisions — they'll surface when teammates edit affected files:\n"
+            f"`/decision we chose X because Y`{affects_hint}"
+        )
+    else:
+        msg = (
+            f"The implementation plan contains {n} decision-worthy choice{'s' if n != 1 else ''}:\n"
+            f"{titles_str}{more}\n"
+            "Capture these as you implement — reasoning is freshest now:\n"
+            f"`/decision we chose X because Y`{affects_hint}"
+        )
 
     return PolicyResult(matched=True, ok=True, system_message=msg)
