@@ -241,3 +241,129 @@ def test_is_plan_file():
     assert not _is_plan_file("/home/user/.claude/decisions/some.md")
     assert not _is_plan_file("/home/user/.claude/plans/data.json")
     assert not _is_plan_file("src/plans/readme.md")  # no .claude/ prefix
+
+
+# ── Superpowers spec/plan support ───────────────────────────────────
+
+SUPERPOWERS_SPEC = """\
+# Auth System Design
+
+## Context
+We need user authentication for the API.
+
+## Approach 1: JWT tokens
+Stateless, scales horizontally, no session storage needed.
+
+## Approach 2: Session cookies
+Simpler to implement, but requires Redis for session storage.
+
+## Decision
+Chose JWT over session cookies because stateless auth scales
+better across our multi-region deployment without shared state.
+
+Instead of bcrypt we opted for argon2 for password hashing
+because it's more resistant to GPU-based attacks.
+
+## Files to Change
+### New: `src/auth/jwt.py`
+### Modify: `src/models/user.py`
+"""
+
+SUPERPOWERS_PLAN = """\
+# Auth Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+
+## Task 1: Create JWT module
+Decided to use PyJWT rather than python-jose because it has
+fewer dependencies and covers our use case.
+
+## Files to Change
+### New: `src/auth/jwt.py`
+### New: `tests/test_jwt.py`
+"""
+
+
+def test_is_plan_file_superpowers_spec():
+    from decision.policy.plan_nudge import _is_plan_file
+
+    assert _is_plan_file("/project/docs/superpowers/specs/2026-04-13-auth-design.md")
+    assert _is_plan_file("/project/docs/superpowers/plans/2026-04-13-auth-plan.md")
+    assert not _is_plan_file("/project/docs/superpowers/specs/notes.txt")
+    assert not _is_plan_file("/project/docs/other/specs/design.md")
+
+
+def test_extracts_candidates_from_superpowers_spec(tmp_path):
+    """Writing a superpowers spec extracts decision candidates."""
+    _, store = make_store(tmp_path)
+    from decision.policy.plan_nudge import _load_candidates, _plan_nudge_condition
+
+    state = make_session_state("sp-spec", store=store)
+    result = _plan_nudge_condition(
+        _plan_write("docs/superpowers/specs/2026-04-13-auth-design.md", SUPERPOWERS_SPEC),
+        state,
+    )
+    assert result is None  # Phase 1 never nudges
+
+    candidates = _load_candidates(state)
+    assert len(candidates) >= 2
+    titles = " ".join(c["title"].lower() for c in candidates)
+    assert "chose" in titles or "jwt" in titles or "approach" in titles
+
+
+def test_extracts_approach_sections(tmp_path):
+    """_extract_decision_candidates picks up approach/option patterns."""
+    from decision.policy.plan_nudge import _extract_decision_candidates
+
+    candidates = _extract_decision_candidates(SUPERPOWERS_SPEC)
+    titles = " ".join(c["title"].lower() for c in candidates)
+    # Should find both decision language AND approach sections
+    assert "chose" in titles or "opted" in titles or "instead" in titles
+    assert "approach" in titles or "jwt" in titles
+
+
+def test_superpowers_spec_nudge_on_impl_edit(tmp_path):
+    """After superpowers spec write, first code edit triggers nudge."""
+    _, store = make_store(tmp_path)
+    from decision.policy.plan_nudge import _plan_nudge_condition
+
+    state = make_session_state("sp-nudge", store=store)
+
+    # Phase 1: write spec
+    _plan_nudge_condition(
+        _plan_write("docs/superpowers/specs/2026-04-13-auth-design.md", SUPERPOWERS_SPEC),
+        state,
+    )
+
+    # Phase 2: first code edit
+    result = _plan_nudge_condition(_code_write("src/auth/jwt.py"), state)
+    assert result is not None
+    assert result.matched is True
+    assert "superpowers spec" in result.system_message
+    assert "auth-design" in result.system_message
+
+
+def test_superpowers_plan_nudge_message(tmp_path):
+    """Superpowers plan nudge references 'plan' not 'spec'."""
+    _, store = make_store(tmp_path)
+    from decision.policy.plan_nudge import _plan_nudge_condition
+
+    state = make_session_state("sp-plan-msg", store=store)
+
+    _plan_nudge_condition(
+        _plan_write("docs/superpowers/plans/2026-04-13-auth-plan.md", SUPERPOWERS_PLAN),
+        state,
+    )
+    result = _plan_nudge_condition(_code_write("src/auth/jwt.py"), state)
+    assert result is not None
+    assert "superpowers plan" in result.system_message
+    assert "auth-plan" in result.system_message
+
+
+def test_superpowers_spec_affects_extracted(tmp_path):
+    """Superpowers spec file paths are extracted as affects."""
+    from decision.policy.plan_nudge import _extract_plan_affects
+
+    affects = _extract_plan_affects(SUPERPOWERS_SPEC)
+    assert "src/auth/jwt.py" in affects
+    assert "src/models/user.py" in affects
