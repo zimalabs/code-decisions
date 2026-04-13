@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.3.0 — 2026-04-13
+
+### Features
+- **Superpowers integration** — auto-detects the [Superpowers](https://github.com/obra/superpowers) plugin and seeds 8 methodology decisions (TDD, design-first, systematic debugging, subagent-driven development, git worktrees, verification-before-completion, detailed plans, spec-before-quality)
+- **Decision extraction from specs/plans** — scans Superpowers spec and plan files (`docs/superpowers/specs/`, `docs/superpowers/plans/`) for trade-offs and approach choices, nudges the agent to capture them as decisions on first implementation edit
+- General `SeedRegistry` pattern for plugin-aware decision seeding, extensible to other plugins
+
 ## 1.1.1 — 2026-04-06
 
 ### Fixes
