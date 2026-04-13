@@ -95,6 +95,16 @@ Just code normally. The plugin runs in the background:
 
 See the [Guide](GUIDE.md) for all commands, `affects` matching rules, team adoption, and more.
 
+## Superpowers integration
+
+If you use [Superpowers](https://github.com/obra/superpowers), Code Decisions detects it automatically and does two things:
+
+**Seeds methodology decisions.** On first session, the plugin creates 8 decision files documenting the Superpowers methodology — TDD, design-before-code, systematic debugging, subagent-driven development, and more. These are searchable, tagged `superpowers`, and committed to git so your whole team inherits them.
+
+**Extracts decisions from specs and plans.** When Superpowers writes a design spec (`docs/superpowers/specs/`) or implementation plan (`docs/superpowers/plans/`), Code Decisions scans the content for trade-offs and approach choices. On the first implementation edit, it nudges the agent to capture those choices as decisions — so they surface automatically when teammates edit the affected files later.
+
+No configuration needed. Install both plugins and they work together.
+
 ## Development
 
 ```sh
