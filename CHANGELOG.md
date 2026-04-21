@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 1.4.0 — 2026-04-21
 
 ### Removed
 - **Superpowers autoseeding** — the SessionStart hook no longer creates 8 `superpowers-*.md` decision files when the Superpowers plugin is detected. Manufactured decisions conflict with the zero-config, user-authored philosophy. Spec/plan extraction from `docs/superpowers/` files is unchanged.
