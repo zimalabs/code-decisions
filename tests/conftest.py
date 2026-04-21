@@ -23,17 +23,6 @@ def _isolate_state_dir(tmp_path):
         yield
 
 
-@pytest.fixture(autouse=True)
-def _isolate_seed_registry(tmp_path):
-    """Point PLUGINS_JSON to a nonexistent file so seeder is a no-op in all tests."""
-    import decision.seeds as seeds_mod
-
-    seeds_mod._registry = None  # reset singleton so registrations don't leak
-    with patch.object(seeds_mod, "PLUGINS_JSON", tmp_path / "no-plugins.json"):
-        yield
-    seeds_mod._registry = None
-
-
 @pytest.fixture
 def dispatch_env():
     """Env dict for subprocess hook tests."""
