@@ -47,16 +47,6 @@ def _session_init_condition(data: dict[str, Any], state: SessionState) -> Policy
     store = state.get_store()
     store.ensure_dir()
 
-    # Seed decisions from detected plugins (idempotent, fast)
-    try:
-        from ..seeds import get_registry
-
-        seeded = get_registry().seed_decisions(store)
-        if seeded:
-            print(f"  ◆ seeded {seeded} decisions from superpowers methodology", file=sys.stderr)
-    except Exception as exc:
-        print(f"decision: seed error: {exc}", file=sys.stderr)
-
     # Rebuild rules index if decision files changed outside Claude Code
     _rebuild_index_if_stale(state)
 
