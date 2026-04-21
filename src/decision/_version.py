@@ -4,4 +4,4 @@ Also update: src/.claude-plugin/plugin.json, .claude-plugin/marketplace.json
 Or just run: scripts/bump-version.sh <version>
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
